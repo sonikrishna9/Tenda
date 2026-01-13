@@ -11,14 +11,12 @@ const app = express();
 /* ✅ CORS (LOCAL + LIVE BOTH) */
 app.use(
   cors({
-    origin: [
-      "http://localhost:3000",        // local frontend
-      "https://your-frontend.vercel.app" // live frontend (later change)
-    ],
+    origin: true, // 👈 allow all origins
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
   })
 );
+
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
