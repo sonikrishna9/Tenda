@@ -1,0 +1,163 @@
+{
+  "hardware": {
+    "standards_and_protocols": [
+      "IEEE802.3",
+      "IEEE802.3u"
+    ],
+    "cpu": "1GHz",
+    "ram": "32MB",
+    "interfaces": {
+      "wan": "1 × 10/100/1000 Mbps",
+      "lan": "3 × 10/100/1000 Mbps"
+    },
+    "antenna": "4 × 6dBi external antennas",
+    "buttons": [
+      "WPS",
+      "Reset"
+    ],
+    "power": {
+      "input": "AC 100–240V ~ 50/60Hz",
+      "output": "DC 9V ⎓ 1A"
+    },
+    "led_indicators": [
+      "System",
+      "WAN",
+      "LAN",
+      "WiFi/WPS"
+    ],
+    "dimensions": {
+      "inches": "8.66 × 5.57 × 1.93",
+      "mm": "220 × 141.5 × 49"
+    }
+  },
+  "wireless": {
+    "standards": {
+      "5GHz": [
+        "IEEE 802.11ac wave2",
+        "IEEE 802.11a",
+        "IEEE 802.11n"
+      ],
+      "2_4GHz": [
+        "IEEE 802.11b",
+        "IEEE 802.11g",
+        "IEEE 802.11n"
+      ]
+    },
+    "data_rate": {
+      "5GHz": "Up to 867 Mbps",
+      "2_4GHz": "Up to 300 Mbps"
+    },
+    "frequency": {
+      "ce": {
+        "2_4GHz": "2412–2472 MHz (CH1–CH13)",
+        "5GHz": "5150–5250 MHz (CH36–CH48)"
+      },
+      "fcc": {
+        "2_4GHz": "2412–2462 MHz (CH1–CH11)",
+        "5GHz_low": "5150–5250 MHz (CH36–CH48)",
+        "5GHz_high": "5725–5850 MHz (CH149–CH165)"
+      }
+    },
+    "transmission_power": {
+      "ce": {
+        "2_4GHz": "< 20 dBm",
+        "5GHz": "< 23 dBm"
+      },
+      "fcc": {
+        "2_4GHz": "< 30 dBm",
+        "5GHz": "< 30 dBm"
+      }
+    },
+    "security": {
+      "encryption": "WPA2-PSK",
+      "wps": true,
+      "wireless_security_toggle": true
+    }
+  },
+  "software": {
+    "internet_connection_type": [
+      "PPPoE",
+      "Dynamic IP",
+      "Static IP"
+    ],
+    "network_protocol": [
+      "IPv4",
+      "IPv6"
+    ],
+    "operating_modes": [
+      "Wireless Router Mode",
+      "AP Mode",
+      "Universal Repeater Mode",
+      "WISP Mode"
+    ],
+    "parental_control": [
+      "Client Filter",
+      "URL Filter",
+      "Time Limit"
+    ],
+    "dhcp": [
+      "DHCP Server",
+      "DHCP Client List",
+      "DHCP Reservation"
+    ],
+    "virtual_server": [
+      "Port Forwarding",
+      "DMZ Host",
+      "UPnP"
+    ],
+    "firewall": [
+      "ICMP Flood Attack Defense",
+      "TCP Flood Attack Defense",
+      "UDP Flood Attack Defense",
+      "Block Ping from WAN"
+    ],
+    "ddns": [
+      "DynDNS",
+      "88ip",
+      "no-ip"
+    ],
+    "vpn": [
+      "IPsec Pass Through",
+      "PPTP Pass Through",
+      "L2TP Pass Through"
+    ]
+  },
+  "special_features": [
+    "Guest Network",
+    "IPTV",
+    "Signal Adjustment",
+    "IPv6",
+    "Tenda App",
+    "Dual-band in One"
+  ],
+  "basic_functions": [
+    "PPPoE Username/Password Clone",
+    "Smart WiFi Schedule",
+    "Smart Power Saving",
+    "Smart LED On/Off",
+    "MAC Address Clone",
+    "Backup & Restore Configurations",
+    "Firmware Upgrade from Local"
+  ],
+  "environment": {
+    "temperature": {
+      "operating": "0°C ~ 40°C",
+      "storage": "-40°C ~ 70°C"
+    },
+    "humidity": {
+      "operating": "10% ~ 90% RH (non-condensing)",
+      "storage": "5% ~ 90% RH (non-condensing)"
+    }
+  },
+  "certifications": [
+    "CE",
+    "FCC",
+    "RoHS"
+  ],
+  "package_contents": [
+    "Wi-Fi Router ×1",
+    "RJ45 Ethernet Cable ×1",
+    "Power Adapter ×1",
+    "Quick Installation Guide ×1"
+  ]
+}
