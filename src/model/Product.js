@@ -2,37 +2,14 @@ const mongoose = require("mongoose");
 
 const productSchema = new mongoose.Schema(
   {
-    title: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+    title: { type: String, required: true },
+    subtitle: String,
+    description: { type: String, required: true },
 
-    subtitle: {
-      type: String,
-      trim: true,
-    },
+    uspPoints: [String],
 
-    description: {
-      type: String,
-      required: true,
-    },
-
-    uspPoints: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
-
-    parentCategory: {
-      type: String,
-      required: true,
-    },
-
-    subCategory: {
-      type: String,
-    },
+    parentCategory: { type: String, required: true },
+    subCategory: String,
 
     images: [
       {
@@ -41,15 +18,29 @@ const productSchema = new mongoose.Schema(
       },
     ],
 
+    videos: [
+      {
+        url: String,
+        public_id: String,
+      },
+    ],
+
+    pdf: {
+      quickstartpdf: { type: String },
+      downloadpdf: { type: String },
+      public_id: [{ type: String }],
+    },
+
+    // 🔥 NEW FEATURED FIELD (OPTIONAL)
+    featured: {
+      type: Boolean,
+      default: false, // old products = NOT featured
+    },
+
     status: {
       type: String,
       enum: ["active", "inactive"],
       default: "active",
-    },
-
-    deletedAt: {
-      type: Date,
-      default: null,
     },
   },
   { timestamps: true }

@@ -1,6 +1,9 @@
 const Product = require("../model/Product.js");
 const uploadToCloudinary = require("../utils/cloudinaryUpload");
+const cloudinary = require("../../config/cloudinary.js");
 const slugify = require("../utils/slugify");
+const uploadPdfToSupabase = require("../utils/supabasePdfUpload");
+const deletePdfFromSupabase = require("../utils/deletePdfFromSupabase.js")
 
 exports.createProduct = async (req, res) => {
   try {
@@ -12,9 +15,8 @@ exports.createProduct = async (req, res) => {
       parentCategory,
       subCategory,
       status,
-      timing,
+      featured,
     } = req.body;
-
 
     if (!title || !description || !parentCategory) {
       return res.status(400).json({
@@ -23,68 +25,67 @@ exports.createProduct = async (req, res) => {
       });
     }
 
-
-    let files = [];
-
-    if (req.files && req.files.length > 0) {
-      files = req.files;
-    } else if (req.file) {
-      files = [req.file];
-    } else {
-      return res.status(400).json({
-        success: false,
-        message: "At least one image file is required",
-      });
-    }
-
-
-    const allowedImageTypes = [
-      "image/jpeg",
-      "image/png",
-      "image/webp",
-      "image/jpg",
-    ];
-
-    for (const file of files) {
-      if (!allowedImageTypes.includes(file.mimetype)) {
-        return res.status(400).json({
-          success: false,
-          message: "Only image files are allowed in this API",
-        });
-      }
-    }
-
-
-    if (req.route.path === "/multiple" && files.length < 2) {
-      return res.status(400).json({
-        success: false,
-        message: "Minimum 2 images are required",
-      });
-    }
-
-    if (req.route.path === "/single" && files.length !== 1) {
-      return res.status(400).json({
-        success: false,
-        message: "Only 1 image is allowed",
-      });
-    }
-
-
     const productSlug = slugify(title);
-    const folderPath = `images/products/${productSlug}`;
 
+    /* ---------- FILE EXTRACTION ---------- */
+    const images = req.files?.images || [];
+    const videos = req.files?.video || [];
 
-    const uploads = files.map((file) =>
-      uploadToCloudinary(
-        file.buffer,
-        folderPath,
-        file.mimetype
+    // 🔥 MULTIPLE PDFs
+    const quickstartPdfs = req.files?.quickstartpdf || [];
+    const downloadPdfs = req.files?.downloadpdf || [];
+
+    /* ---------- CLOUDINARY UPLOAD (UNCHANGED) ---------- */
+    const imageResults = await Promise.all(
+      images.map((file) =>
+        uploadToCloudinary(
+          file.buffer,
+          `images/products/${productSlug}`,
+          file.mimetype,
+          file.originalname
+        )
       )
     );
 
-    const results = await Promise.all(uploads);
+    const videoResults = await Promise.all(
+      videos.map((file) =>
+        uploadToCloudinary(
+          file.buffer,
+          `videos/products/${productSlug}`,
+          file.mimetype,
+          file.originalname
+        )
+      )
+    );
 
+    /* ---------- SUPABASE PDF UPLOAD (MULTIPLE) ---------- */
+    let quickstartPdfUrl = "";
+    let downloadPdfUrl = "";
+    let pdfPublicIds = [];
 
+    // Upload quickstart PDFs
+    for (let i = 0; i < quickstartPdfs.length; i++) {
+      const result = await uploadPdfToSupabase(
+        quickstartPdfs[i],
+        `products/${productSlug}/pdfs`
+      );
+
+      if (i === 0) quickstartPdfUrl = result.url; // main pdf
+      pdfPublicIds.push(result.path);
+    }
+
+    // Upload download PDFs
+    for (let i = 0; i < downloadPdfs.length; i++) {
+      const result = await uploadPdfToSupabase(
+        downloadPdfs[i],
+        `products/${productSlug}/pdfs`
+      );
+
+      if (i === 0) downloadPdfUrl = result.url; // main pdf
+      pdfPublicIds.push(result.path);
+    }
+
+    /* ---------- CREATE PRODUCT ---------- */
     const product = await Product.create({
       title,
       subtitle,
@@ -94,10 +95,25 @@ exports.createProduct = async (req, res) => {
       subCategory,
       status,
       timing,
-      images: results.map((img) => ({
+
+      // 🔥 FEATURE FLAG (SAFE)
+      featured: featured === "true" || featured === true,
+
+      images: imageResults.map((img) => ({
         url: img.secure_url,
         public_id: img.public_id,
       })),
+
+      videos: videoResults.map((vid) => ({
+        url: vid.secure_url,
+        public_id: vid.public_id,
+      })),
+
+      pdf: {
+        quickstartpdf: quickstartPdfUrl,
+        downloadpdf: downloadPdfUrl,
+        public_id: pdfPublicIds,
+      },
     });
 
     return res.status(201).json({
@@ -105,7 +121,6 @@ exports.createProduct = async (req, res) => {
       message: "Product created successfully",
       product,
     });
-
   } catch (error) {
     console.error("Create Product Error:", error);
     return res.status(500).json({
@@ -116,6 +131,181 @@ exports.createProduct = async (req, res) => {
   }
 };
 
+exports.updateProduct = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    // 🔐 Ensure pdf object exists (old products safety)
+    if (!product.pdf) {
+      product.pdf = {
+        quickstartpdf: "",
+        downloadpdf: "",
+        public_id: [],
+      };
+    }
+
+    const {
+      title,
+      subtitle,
+      description,
+      parentCategory,
+      subCategory,
+      status,
+      uspPoints,
+      featured, // 🔥 NEW (OPTIONAL)
+      removeImages,
+      removeVideo,
+      removeQuickstart,
+      removeDownload,
+    } = req.body;
+
+    const productSlug = slugify(title || product.title);
+
+    /* ===================== BASIC FIELDS ===================== */
+    if (title) product.title = title;
+    if (subtitle) product.subtitle = subtitle;
+    if (description) product.description = description;
+    if (parentCategory) product.parentCategory = parentCategory;
+    if (subCategory) product.subCategory = subCategory;
+    if (status) product.status = status;
+    if (uspPoints) product.uspPoints = JSON.parse(uspPoints);
+
+    // 🔥 FEATURED PRODUCT UPDATE (SAFE)
+    if (featured !== undefined) {
+      product.featured = featured === "true" || featured === true;
+    }
+
+    /* ===================== REMOVE IMAGES ===================== */
+    if (removeImages) {
+      const imagesToRemove = JSON.parse(removeImages);
+
+      for (const publicId of imagesToRemove) {
+        await cloudinary.uploader.destroy(publicId);
+      }
+
+      product.images = product.images.filter(
+        (img) => !imagesToRemove.includes(img.public_id)
+      );
+    }
+
+    /* ===================== REMOVE VIDEO ===================== */
+    if (removeVideo === "true" || removeVideo === true) {
+      for (const vid of product.videos) {
+        await cloudinary.uploader.destroy(vid.public_id, {
+          resource_type: "video",
+        });
+      }
+      product.videos = [];
+    }
+
+    /* ===================== REMOVE PDFs ===================== */
+    if (removeQuickstart === "true" || removeQuickstart === true) {
+      await deletePdfFromSupabase(product.pdf.quickstartpdf);
+      product.pdf.quickstartpdf = "";
+    }
+
+    if (removeDownload === "true" || removeDownload === true) {
+      await deletePdfFromSupabase(product.pdf.downloadpdf);
+      product.pdf.downloadpdf = "";
+    }
+
+    /* ===================== UPLOAD IMAGES ===================== */
+    const newImages = req.files?.images || [];
+
+    if (newImages.length > 0) {
+      const imageResults = await Promise.all(
+        newImages.map((file) =>
+          uploadToCloudinary(
+            file.buffer,
+            `images/products/${productSlug}`,
+            file.mimetype,
+            file.originalname
+          )
+        )
+      );
+
+      product.images.push(
+        ...imageResults.map((img) => ({
+          url: img.secure_url,
+          public_id: img.public_id,
+        }))
+      );
+    }
+
+    /* ===================== UPLOAD VIDEO ===================== */
+    const newVideos = req.files?.video || [];
+
+    if (newVideos.length > 0) {
+      for (const vid of product.videos) {
+        await cloudinary.uploader.destroy(vid.public_id, {
+          resource_type: "video",
+        });
+      }
+
+      const videoResults = await Promise.all(
+        newVideos.map((file) =>
+          uploadToCloudinary(
+            file.buffer,
+            `videos/products/${productSlug}`,
+            file.mimetype,
+            file.originalname
+          )
+        )
+      );
+
+      product.videos = videoResults.map((vid) => ({
+        url: vid.secure_url,
+        public_id: vid.public_id,
+      }));
+    }
+
+    /* ===================== UPLOAD PDFs ===================== */
+    const quickstartPdfs = req.files?.quickstartpdf || [];
+    const downloadPdfs = req.files?.downloadpdf || [];
+
+    for (let i = 0; i < quickstartPdfs.length; i++) {
+      const result = await uploadPdfToSupabase(
+        quickstartPdfs[i],
+        `products/${productSlug}/pdfs`
+      );
+
+      if (i === 0) product.pdf.quickstartpdf = result.url;
+      product.pdf.public_id.push(result.path);
+    }
+
+    for (let i = 0; i < downloadPdfs.length; i++) {
+      const result = await uploadPdfToSupabase(
+        downloadPdfs[i],
+        `products/${productSlug}/pdfs`
+      );
+
+      if (i === 0) product.pdf.downloadpdf = result.url;
+      product.pdf.public_id.push(result.path);
+    }
+
+    await product.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Product updated successfully",
+      product,
+    });
+  } catch (error) {
+    console.error("Update Product Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+};
 
 exports.getProduct = async (req, res) => {
   try {
@@ -182,3 +372,31 @@ exports.getallProducts = async (req, res) => {
     })
   }
 }
+
+exports.getfeaturedProduts = async (req, res) => {
+  try {
+    const featuredProducts = await Product.find({ featured: true })
+
+    if (!featuredProducts) {
+      return res.status(404).json({
+        success: false,
+        message: "Featured Product not Found."
+      })
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Featured Product fetched successfully",
+      featuredProducts
+    })
+
+  }
+  catch (error) {
+    return res.status(500).json({
+      sucess: false,
+      message: "Internal Server Error",
+      error
+    })
+  }
+}
+

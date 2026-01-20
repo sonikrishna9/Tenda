@@ -23,11 +23,8 @@ app.use(express.urlencoded({ extended: true }));
 
 /* Routes */
 app.use("/api/product", require("./src/routes/productRoutes.js"));
+app.use("/api/parentcategory", require("./src/routes/parentcategoryRoute.js"));
 
-/* Health check (IMPORTANT for testing) */
-app.get("/", (req, res) => {
-  res.send("Backend is running");
-});
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
