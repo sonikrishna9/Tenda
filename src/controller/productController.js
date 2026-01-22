@@ -5,6 +5,19 @@ const slugify = require("../utils/slugify");
 const uploadPdfToSupabase = require("../utils/supabasePdfUpload");
 const deletePdfFromSupabase = require("../utils/deletePdfFromSupabase.js")
 
+
+const normalizePdf = (pdf = {}) => {
+  return {
+    quickstartpdfs: Array.isArray(pdf.quickstartpdfs)
+      ? pdf.quickstartpdfs
+      : [],
+    downloadpdfs: Array.isArray(pdf.downloadpdfs)
+      ? pdf.downloadpdfs
+      : [],
+  };
+};
+
+/* ===================== CREATE PRODUCT ===================== */
 exports.createProduct = async (req, res) => {
   try {
     const {
@@ -25,67 +38,55 @@ exports.createProduct = async (req, res) => {
       });
     }
 
-    const productSlug = slugify(title);
+    const slug = slugify(title);
 
-    /* ---------- FILE EXTRACTION ---------- */
     const images = req.files?.images || [];
-    const videos = req.files?.video || [];
+    const videos = req.files?.videos || [];
+    const quickstartPdfs = req.files?.quickstartpdfs || [];
+    const downloadPdfs = req.files?.downloadpdfs || [];
 
-    // 🔥 MULTIPLE PDFs
-    const quickstartPdfs = req.files?.quickstartpdf || [];
-    const downloadPdfs = req.files?.downloadpdf || [];
-
-    /* ---------- CLOUDINARY UPLOAD (UNCHANGED) ---------- */
-    const imageResults = await Promise.all(
+    /* ---------- IMAGES → CLOUDINARY ---------- */
+    const uploadedImages = await Promise.all(
       images.map((file) =>
         uploadToCloudinary(
           file.buffer,
-          `images/products/${productSlug}`,
+          `products/images/${slug}`,
           file.mimetype,
           file.originalname
         )
       )
     );
 
-    const videoResults = await Promise.all(
-      videos.map((file) =>
-        uploadToCloudinary(
-          file.buffer,
-          `videos/products/${productSlug}`,
-          file.mimetype,
-          file.originalname
-        )
-      )
-    );
-
-    /* ---------- SUPABASE PDF UPLOAD (MULTIPLE) ---------- */
-    let quickstartPdfUrl = "";
-    let downloadPdfUrl = "";
-    let pdfPublicIds = [];
-
-    // Upload quickstart PDFs
-    for (let i = 0; i < quickstartPdfs.length; i++) {
+    /* ---------- VIDEOS → SUPABASE ---------- */
+    const uploadedVideos = [];
+    for (const file of videos) {
       const result = await uploadPdfToSupabase(
-        quickstartPdfs[i],
-        `products/${productSlug}/pdfs`
+        file,
+        `products/${slug}/videos`
       );
-
-      if (i === 0) quickstartPdfUrl = result.url; // main pdf
-      pdfPublicIds.push(result.path);
+      uploadedVideos.push(result);
     }
 
-    // Upload download PDFs
-    for (let i = 0; i < downloadPdfs.length; i++) {
-      const result = await uploadPdfToSupabase(
-        downloadPdfs[i],
-        `products/${productSlug}/pdfs`
-      );
+    /* ---------- PDFs → SUPABASE ---------- */
+    const quickstartpdfs = [];
+    const downloadpdfs = [];
 
-      if (i === 0) downloadPdfUrl = result.url; // main pdf
-      pdfPublicIds.push(result.path);
+    for (const file of quickstartPdfs) {
+      const result = await uploadPdfToSupabase(
+        file,
+        `products/${slug}/quickstart`
+      );
+      quickstartpdfs.push(result);
     }
 
-    /* ---------- CREATE PRODUCT ---------- */
+    for (const file of downloadPdfs) {
+      const result = await uploadPdfToSupabase(
+        file,
+        `products/${slug}/download`
+      );
+      downloadpdfs.push(result);
+    }
+
     const product = await Product.create({
       title,
       subtitle,
@@ -94,26 +95,15 @@ exports.createProduct = async (req, res) => {
       parentCategory,
       subCategory,
       status,
-      timing,
-
-      // 🔥 FEATURE FLAG (SAFE)
       featured: featured === "true" || featured === true,
 
-      images: imageResults.map((img) => ({
+      images: uploadedImages.map((img) => ({
         url: img.secure_url,
         public_id: img.public_id,
       })),
 
-      videos: videoResults.map((vid) => ({
-        url: vid.secure_url,
-        public_id: vid.public_id,
-      })),
-
-      pdf: {
-        quickstartpdf: quickstartPdfUrl,
-        downloadpdf: downloadPdfUrl,
-        public_id: pdfPublicIds,
-      },
+      videos: uploadedVideos,
+      pdf: { quickstartpdfs, downloadpdfs },
     });
 
     return res.status(201).json({
@@ -122,7 +112,7 @@ exports.createProduct = async (req, res) => {
       product,
     });
   } catch (error) {
-    console.error("Create Product Error:", error);
+    console.error("CREATE PRODUCT ERROR:", error);
     return res.status(500).json({
       success: false,
       message: "Internal Server Error",
@@ -131,25 +121,15 @@ exports.createProduct = async (req, res) => {
   }
 };
 
+/* ===================== UPDATE PRODUCT ===================== */
 exports.updateProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
-
     if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: "Product not found",
-      });
+      return res.status(404).json({ success: false, message: "Product not found" });
     }
 
-    // 🔐 Ensure pdf object exists (old products safety)
-    if (!product.pdf) {
-      product.pdf = {
-        quickstartpdf: "",
-        downloadpdf: "",
-        public_id: [],
-      };
-    }
+    product.pdf = normalizePdf(product.pdf);
 
     const {
       title,
@@ -159,135 +139,229 @@ exports.updateProduct = async (req, res) => {
       subCategory,
       status,
       uspPoints,
-      featured, // 🔥 NEW (OPTIONAL)
+      featured,
+
+      parameters, // ⭐ FRONTEND SE AAYEGA (FULL ARRAY)
+
       removeImages,
-      removeVideo,
-      removeQuickstart,
-      removeDownload,
+      removeFeaturePictures,
+      removeVideos,
+      removeQuickstartIndices,
+      removeDownloadIndices,
     } = req.body;
 
-    const productSlug = slugify(title || product.title);
+    const slug = slugify(title || product.title, {
+      lower: true,
+      strict: true,
+    });
 
-    /* ===================== BASIC FIELDS ===================== */
+    /* ---------- BASIC FIELDS ---------- */
     if (title) product.title = title;
     if (subtitle) product.subtitle = subtitle;
     if (description) product.description = description;
     if (parentCategory) product.parentCategory = parentCategory;
     if (subCategory) product.subCategory = subCategory;
     if (status) product.status = status;
-    if (uspPoints) product.uspPoints = JSON.parse(uspPoints);
-
-    // 🔥 FEATURED PRODUCT UPDATE (SAFE)
+    if (uspPoints) {
+      try {
+        product.uspPoints = JSON.parse(uspPoints);
+      } catch {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid uspPoints format",
+        });
+      }
+    }
     if (featured !== undefined) {
       product.featured = featured === "true" || featured === true;
     }
 
-    /* ===================== REMOVE IMAGES ===================== */
+    /* ---------- REMOVE IMAGES ---------- */
     if (removeImages) {
-      const imagesToRemove = JSON.parse(removeImages);
-
-      for (const publicId of imagesToRemove) {
-        await cloudinary.uploader.destroy(publicId);
+      let ids = [];
+      try {
+        ids = JSON.parse(removeImages);
+      } catch {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid removeImages format",
+        });
       }
 
       product.images = product.images.filter(
-        (img) => !imagesToRemove.includes(img.public_id)
+        (img) => !ids.includes(img.public_id)
       );
     }
 
-    /* ===================== REMOVE VIDEO ===================== */
-    if (removeVideo === "true" || removeVideo === true) {
-      for (const vid of product.videos) {
-        await cloudinary.uploader.destroy(vid.public_id, {
-          resource_type: "video",
-        });
+
+    /* ---------- REMOVE FEATURE PICTURES ---------- */
+    if (removeFeaturePictures) {
+      const ids = JSON.parse(removeFeaturePictures);
+
+      product.featurePictures = product.featurePictures.filter(
+        (img) => !ids.includes(img.public_id)
+      );
+
+      // optional: cloudinary delete
+      for (const id of ids) {
+        try {
+          await deleteFromCloudinary(id);
+        } catch (err) {
+          console.warn("Cloudinary delete failed:", id);
+        }
       }
-      product.videos = [];
+
     }
 
-    /* ===================== REMOVE PDFs ===================== */
-    if (removeQuickstart === "true" || removeQuickstart === true) {
-      await deletePdfFromSupabase(product.pdf.quickstartpdf);
-      product.pdf.quickstartpdf = "";
+
+    /* ---------- REMOVE VIDEOS ---------- */
+    if (removeVideos) {
+      const paths = JSON.parse(removeVideos);
+
+      await deletePdfFromSupabase(paths);
+      console.log("🧨 DELETE REQUEST PATHS:", paths);
+
+
+      product.videos = product.videos.filter(
+        (v) => !paths.includes(v.path)
+      );
     }
 
-    if (removeDownload === "true" || removeDownload === true) {
-      await deletePdfFromSupabase(product.pdf.downloadpdf);
-      product.pdf.downloadpdf = "";
+
+    /* ---------- REMOVE PDFs ---------- */
+    if (removeQuickstartIndices) {
+      const indices = JSON.parse(removeQuickstartIndices);
+      product.pdf.quickstartpdfs =
+        product.pdf.quickstartpdfs.filter((_, i) => !indices.includes(i));
     }
 
-    /* ===================== UPLOAD IMAGES ===================== */
+    if (removeDownloadIndices) {
+      const indices = JSON.parse(removeDownloadIndices);
+      product.pdf.downloadpdfs =
+        product.pdf.downloadpdfs.filter((_, i) => !indices.includes(i));
+    }
+
+    /* ---------- ADD IMAGES ---------- */
     const newImages = req.files?.images || [];
-
-    if (newImages.length > 0) {
-      const imageResults = await Promise.all(
+    if (newImages.length) {
+      const uploaded = await Promise.all(
         newImages.map((file) =>
           uploadToCloudinary(
             file.buffer,
-            `images/products/${productSlug}`,
+            `products/images/${slug}`,
             file.mimetype,
             file.originalname
           )
         )
       );
-
       product.images.push(
-        ...imageResults.map((img) => ({
+        ...uploaded.map((img) => ({
           url: img.secure_url,
           public_id: img.public_id,
         }))
       );
     }
 
-    /* ===================== UPLOAD VIDEO ===================== */
-    const newVideos = req.files?.video || [];
+    /* ---------- ADD FEATURE PICTURES ---------- */
+    const newFeaturePictures = req.files?.featurePictures || [];
 
-    if (newVideos.length > 0) {
-      for (const vid of product.videos) {
-        await cloudinary.uploader.destroy(vid.public_id, {
-          resource_type: "video",
+    if (newFeaturePictures.length) {
+      const total =
+        product.featurePictures.length + newFeaturePictures.length;
+
+      if (total > 10) {
+        return res.status(400).json({
+          success: false,
+          message: "Maximum 10 feature pictures allowed",
         });
       }
 
-      const videoResults = await Promise.all(
-        newVideos.map((file) =>
+      const uploaded = await Promise.all(
+        newFeaturePictures.map((file) =>
           uploadToCloudinary(
             file.buffer,
-            `videos/products/${productSlug}`,
+            `products/featurepictures/${slug}`, // ⭐ REQUIRED FOLDER
             file.mimetype,
             file.originalname
           )
         )
       );
 
-      product.videos = videoResults.map((vid) => ({
-        url: vid.secure_url,
-        public_id: vid.public_id,
-      }));
+      product.featurePictures.push(
+        ...uploaded.map((img) => ({
+          url: img.secure_url,
+          public_id: img.public_id,
+        }))
+      );
     }
 
-    /* ===================== UPLOAD PDFs ===================== */
-    const quickstartPdfs = req.files?.quickstartpdf || [];
-    const downloadPdfs = req.files?.downloadpdf || [];
+    /* ---------- PARAMETERS (EDIT + DELETE SAFE) ---------- */
+    if (parameters !== undefined) {
+      let parsedParameters;
 
-    for (let i = 0; i < quickstartPdfs.length; i++) {
-      const result = await uploadPdfToSupabase(
-        quickstartPdfs[i],
-        `products/${productSlug}/pdfs`
-      );
+      try {
+        parsedParameters = JSON.parse(parameters);
+      } catch (err) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid parameters format",
+        });
+      }
 
-      if (i === 0) product.pdf.quickstartpdf = result.url;
-      product.pdf.public_id.push(result.path);
+      // 🛡️ Defensive validation (optional but recommended)
+      if (!Array.isArray(parsedParameters)) {
+        return res.status(400).json({
+          success: false,
+          message: "Parameters must be an array",
+        });
+      }
+
+      // 🧹 Clean & normalize data (frontend UX ke hisaab se)
+      product.parameters = parsedParameters
+        .filter((p) => p && typeof p === "object")
+        .map((p) => ({
+          title: p.title || "",
+          items: Array.isArray(p.items)
+            ? p.items
+              .filter((i) => i && typeof i === "object")
+              .map((i) => ({
+                title: i.title || "",
+                subtitle: i.subtitle || "",
+              }))
+            : [],
+        }));
     }
 
-    for (let i = 0; i < downloadPdfs.length; i++) {
-      const result = await uploadPdfToSupabase(
-        downloadPdfs[i],
-        `products/${productSlug}/pdfs`
-      );
 
-      if (i === 0) product.pdf.downloadpdf = result.url;
-      product.pdf.public_id.push(result.path);
+
+    /* ---------- ADD VIDEOS ---------- */
+    const newVideos = req.files?.videos || [];
+    for (const file of newVideos) {
+      const result = await uploadPdfToSupabase(
+        file,
+        `products/${slug}/videos`
+      );
+      product.videos.push(result);
+    }
+
+    /* ---------- ADD PDFs ---------- */
+    const quickstartPdfs = req.files?.quickstartpdfs || [];
+    const downloadPdfs = req.files?.downloadpdfs || [];
+
+    for (const file of quickstartPdfs) {
+      const result = await uploadPdfToSupabase(
+        file,
+        `products/${slug}/quickstart`
+      );
+      product.pdf.quickstartpdfs.push(result);
+    }
+
+    for (const file of downloadPdfs) {
+      const result = await uploadPdfToSupabase(
+        file,
+        `products/${slug}/download`
+      );
+      product.pdf.downloadpdfs.push(result);
     }
 
     await product.save();
@@ -298,7 +372,7 @@ exports.updateProduct = async (req, res) => {
       product,
     });
   } catch (error) {
-    console.error("Update Product Error:", error);
+    console.error("UPDATE PRODUCT ERROR:", error);
     return res.status(500).json({
       success: false,
       message: "Internal Server Error",
@@ -306,6 +380,7 @@ exports.updateProduct = async (req, res) => {
     });
   }
 };
+
 
 exports.getProduct = async (req, res) => {
   try {

@@ -1,13 +1,12 @@
-const supabase = require("../../config/supabase.js");
+const supabase = require("../../config/supabase");
 
-const uploadPdfToSupabase = async (file, folder) => {
+const uploadToSupabase = async (file, folder) => {
   const filePath = `${folder}/${Date.now()}-${file.originalname}`;
 
   const { error } = await supabase.storage
     .from("product-pdfs")
     .upload(filePath, file.buffer, {
       contentType: file.mimetype,
-      upsert: false,
     });
 
   if (error) throw error;
@@ -22,4 +21,4 @@ const uploadPdfToSupabase = async (file, folder) => {
   };
 };
 
-module.exports = uploadPdfToSupabase;
+module.exports = uploadToSupabase;

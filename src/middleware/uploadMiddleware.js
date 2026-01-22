@@ -3,7 +3,7 @@ const multer = require("multer");
 const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
-  const allowedMimeTypes = [
+  const allowed = [
     "image/jpeg",
     "image/png",
     "image/webp",
@@ -14,26 +14,22 @@ const fileFilter = (req, file, cb) => {
     "application/pdf",
   ];
 
-  if (allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error("Invalid file type"), false);
-  }
+  if (allowed.includes(file.mimetype)) cb(null, true);
+  else cb(new Error("Invalid file type"), false);
 };
 
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB
 });
 
 module.exports = {
   uploadMixed: upload.fields([
-    { name: "images", maxCount: 7 },          // Cloudinary
-    { name: "video", maxCount: 10 },             // Cloudinary
-
-    // 🔥 PDF fields (Supabase)
-    { name: "quickstartpdf", maxCount: 5 },     // multiple allowed
-    { name: "downloadpdf", maxCount: 5 },       // multiple allowed
+    { name: "images", maxCount: 7 },
+    { name: "featurePictures", maxCount: 10 }, // ⭐ NEW
+    { name: "videos", maxCount: 10 },
+    { name: "quickstartpdfs", maxCount: 10 },
+    { name: "downloadpdfs", maxCount: 20 },
   ]),
 };

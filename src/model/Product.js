@@ -18,23 +18,54 @@ const productSchema = new mongoose.Schema(
       },
     ],
 
-    videos: [
+    // ⭐ NEW: FEATURE PICTURES (MULTIPLE IMAGES)
+    featurePictures: [
       {
         url: String,
         public_id: String,
       },
     ],
 
+    // ⭐ NEW: PARAMETERS FIELD
+    parameters: [
+      {
+        title: String,
+        items: [
+          {
+            title: String,
+            subtitle: String,
+          },
+        ],
+      },
+    ],
+
+    // 🎥 VIDEOS → SUPABASE
+    videos: [
+      {
+        url: String,
+        path: String,
+      },
+    ],
+
+    // 📄 PDFs → SUPABASE
     pdf: {
-      quickstartpdf: { type: String },
-      downloadpdf: { type: String },
-      public_id: [{ type: String }],
+      quickstartpdfs: [
+        {
+          url: String,
+          path: String,
+        },
+      ],
+      downloadpdfs: [
+        {
+          url: String,
+          path: String,
+        },
+      ],
     },
 
-    // 🔥 NEW FEATURED FIELD (OPTIONAL)
     featured: {
       type: Boolean,
-      default: false, // old products = NOT featured
+      default: false,
     },
 
     status: {
