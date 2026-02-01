@@ -18,12 +18,17 @@ app.use(
 );
 
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({
+  strict: false
+}));
+app.use(express.urlencoded({
+  extended: true
+}));
 
 /* Routes */
 app.use("/api/product", require("./src/routes/productRoutes.js"));
 app.use("/api/parentcategory", require("./src/routes/parentcategoryRoute.js"));
+app.use("/api/blog", require("./src/routes/blogroute.js"));
 
 
 const PORT = process.env.PORT || 8080;

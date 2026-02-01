@@ -2,8 +2,12 @@ const ParentCategory = require("../model/parentcategorymodel.js");
 const uploadToCloudinary = require("../utils/cloudinaryUpload");
 const slugify = require("../utils/slugify.js");
 const cloudinary = require("../../config/cloudinary.js")
+// const deleteFromCloudinary = require("../utils/");
+
 
 exports.createparentcategory = async (req, res) => {
+
+
     try {
         /* ---------------------------------
            1. SAFE BODY ACCESS
@@ -120,8 +124,9 @@ exports.getcategory = async (req, res) => {
     }
 }
 
-
 exports.updatecategory = async (req, res) => {
+
+
     try {
         /* ---------------------------------
            1. FIND CATEGORY
@@ -204,7 +209,8 @@ exports.updatecategory = async (req, res) => {
             category,
         });
 
-    } catch (error) {
+    }
+    catch (error) {
         console.error("Update Category Error:", error);
 
         return res.status(500).json({
@@ -215,3 +221,44 @@ exports.updatecategory = async (req, res) => {
     }
 };
 
+exports.deletecategory = async (req, res) => {
+    try {
+        /* ---------------------------------
+           1. FIND CATEGORY
+        ----------------------------------*/
+        const category = await ParentCategory.findById(req.params.id);
+
+        if (!category) {
+            return res.status(404).json({
+                success: false,
+                message: "Category not found",
+            });
+        }
+
+        /* ---------------------------------
+           2. DELETE IMAGE FROM CLOUDINARY
+        ----------------------------------*/
+        if (category.images?.public_id) {
+            await cloudinary.uploader.destroy(category.images.public_id);
+        }
+
+        /* ---------------------------------
+           3. DELETE CATEGORY FROM DATABASE
+        ----------------------------------*/
+        await ParentCategory.findByIdAndDelete(req.params.id);
+
+        return res.status(200).json({
+            success: true,
+            message: "Parent category deleted successfully",
+        });
+
+    } catch (error) {
+        console.error("Delete Category Error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error",
+            error: error.message,
+        });
+    }
+};

@@ -3,23 +3,33 @@ const uploadToCloudinary = require("../utils/cloudinaryUpload");
 const cloudinary = require("../../config/cloudinary.js");
 const slugify = require("../utils/slugify");
 const uploadPdfToSupabase = require("../utils/supabasePdfUpload");
-const deletePdfFromSupabase = require("../utils/deletePdfFromSupabase.js")
+const deletePdfFromSupabase = require("../utils/deletePdfFromSupabase.js");
 
+/* ===================== HELPERS ===================== */
 
-const normalizePdf = (pdf = {}) => {
-  return {
-    quickstartpdfs: Array.isArray(pdf.quickstartpdfs)
-      ? pdf.quickstartpdfs
-      : [],
-    downloadpdfs: Array.isArray(pdf.downloadpdfs)
-      ? pdf.downloadpdfs
-      : [],
-  };
+const normalizePdf = (pdf = {}) => ({
+  quickstartpdfs: Array.isArray(pdf.quickstartpdfs) ? pdf.quickstartpdfs : [],
+  downloadpdfs: Array.isArray(pdf.downloadpdfs) ? pdf.downloadpdfs : [],
+});
+
+const safeParse = (value, fallback) => {
+  try {
+    if (!value || value === "null") return fallback;
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
 };
 
+
+const normalizeArray = (arr) => (Array.isArray(arr) ? arr : []);
+
 /* ===================== CREATE PRODUCT ===================== */
+
+
 exports.createProduct = async (req, res) => {
   try {
+
     const {
       title,
       subtitle,
@@ -29,7 +39,13 @@ exports.createProduct = async (req, res) => {
       subCategory,
       status,
       featured,
+      parameters,
     } = req.body;
+
+    // console.log("PARAMETERS RAW:", parameters);
+    // console.log("PARSED:", parameters ? JSON.parse(parameters) : []);
+
+
 
     if (!title || !description || !parentCategory) {
       return res.status(400).json({
@@ -38,10 +54,11 @@ exports.createProduct = async (req, res) => {
       });
     }
 
-    const slug = slugify(title);
+    const slug = slugify(title, { lower: true, strict: true });
 
     const images = req.files?.images || [];
     const videos = req.files?.videos || [];
+    const featurePictures = req.files?.featurePictures || [];
     const quickstartPdfs = req.files?.quickstartpdfs || [];
     const downloadPdfs = req.files?.downloadpdfs || [];
 
@@ -57,51 +74,60 @@ exports.createProduct = async (req, res) => {
       )
     );
 
+    const uploadedFeaturePictures = await Promise.all(
+      featurePictures.map((file) =>
+        uploadToCloudinary(
+          file.buffer,
+          `products/feature-pictures/${slug}`,
+          file.mimetype,
+          file.originalname
+        )
+      )
+    );
+
+
     /* ---------- VIDEOS → SUPABASE ---------- */
-    const uploadedVideos = [];
-    for (const file of videos) {
-      const result = await uploadPdfToSupabase(
-        file,
-        `products/${slug}/videos`
-      );
-      uploadedVideos.push(result);
-    }
+    const uploadedVideos = await Promise.all(
+      videos.map((file) =>
+        uploadPdfToSupabase(file, `products/${slug}/videos`)
+      )
+    );
 
     /* ---------- PDFs → SUPABASE ---------- */
-    const quickstartpdfs = [];
-    const downloadpdfs = [];
+    const quickstartpdfs = await Promise.all(
+      quickstartPdfs.map((file) =>
+        uploadPdfToSupabase(file, `products/${slug}/quickstart`)
+      )
+    );
 
-    for (const file of quickstartPdfs) {
-      const result = await uploadPdfToSupabase(
-        file,
-        `products/${slug}/quickstart`
-      );
-      quickstartpdfs.push(result);
-    }
-
-    for (const file of downloadPdfs) {
-      const result = await uploadPdfToSupabase(
-        file,
-        `products/${slug}/download`
-      );
-      downloadpdfs.push(result);
-    }
+    const downloadpdfs = await Promise.all(
+      downloadPdfs.map((file) =>
+        uploadPdfToSupabase(file, `products/${slug}/download`)
+      )
+    );
 
     const product = await Product.create({
       title,
       subtitle,
+      slug,
       description,
-      uspPoints: uspPoints ? JSON.parse(uspPoints) : [],
+      uspPoints: safeParse(uspPoints, []),
       parentCategory,
       subCategory,
       status,
       featured: featured === "true" || featured === true,
+      parameters: safeParse(parameters, []),
 
       images: uploadedImages.map((img) => ({
         url: img.secure_url,
         public_id: img.public_id,
       })),
 
+      featurePictures: uploadedFeaturePictures.map((img) => ({
+        url: img.secure_url,
+        public_id: img.public_id,
+      })),
+      // SAFE DEFAULT
       videos: uploadedVideos,
       pdf: { quickstartpdfs, downloadpdfs },
     });
@@ -121,14 +147,96 @@ exports.createProduct = async (req, res) => {
   }
 };
 
+/* ===================== DELETE PRODUCT ===================== */
+exports.deleteProduct = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const product = await Product.findById(id);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    /* ---------- DELETE IMAGES (CLOUDINARY) ---------- */
+    if (Array.isArray(product.images)) {
+      for (const img of product.images) {
+        if (img.public_id) {
+          await cloudinary.uploader.destroy(img.public_id);
+        }
+      }
+    }
+
+    /* ---------- DELETE FEATURE PICTURES ---------- */
+    if (Array.isArray(product.featurePictures)) {
+      for (const img of product.featurePictures) {
+        if (img.public_id) {
+          await cloudinary.uploader.destroy(img.public_id);
+        }
+      }
+    }
+
+    /* ---------- DELETE VIDEOS (SUPABASE) ---------- */
+    if (Array.isArray(product.videos) && product.videos.length) {
+      const paths = product.videos.map(v => v.path).filter(Boolean);
+      if (paths.length) {
+        await deletePdfFromSupabase(paths);
+      }
+    }
+
+    /* ---------- DELETE PDFs (SUPABASE) ---------- */
+    if (product.pdf) {
+      const pdfPaths = [];
+
+      if (Array.isArray(product.pdf.quickstartpdfs)) {
+        product.pdf.quickstartpdfs.forEach(p => p.path && pdfPaths.push(p.path));
+      }
+
+      if (Array.isArray(product.pdf.downloadpdfs)) {
+        product.pdf.downloadpdfs.forEach(p => p.path && pdfPaths.push(p.path));
+      }
+
+      if (pdfPaths.length) {
+        await deletePdfFromSupabase(pdfPaths);
+      }
+    }
+
+    /* ---------- DELETE PRODUCT ---------- */
+    await product.deleteOne();
+
+    return res.status(200).json({
+      success: true,
+      message: "Product deleted successfully",
+    });
+
+  } catch (error) {
+    console.error("DELETE PRODUCT ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+};
+
+
 /* ===================== UPDATE PRODUCT ===================== */
 exports.updateProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
     if (!product) {
-      return res.status(404).json({ success: false, message: "Product not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
     }
 
+    /* ---------- SAFE NORMALIZATION ---------- */
+    product.images = normalizeArray(product.images);
+    product.featurePictures = normalizeArray(product.featurePictures);
+    product.videos = normalizeArray(product.videos);
     product.pdf = normalizePdf(product.pdf);
 
     const {
@@ -140,8 +248,7 @@ exports.updateProduct = async (req, res) => {
       status,
       uspPoints,
       featured,
-
-      parameters, // ⭐ FRONTEND SE AAYEGA (FULL ARRAY)
+      parameters,
 
       removeImages,
       removeFeaturePictures,
@@ -156,87 +263,64 @@ exports.updateProduct = async (req, res) => {
     });
 
     /* ---------- BASIC FIELDS ---------- */
-    if (title) product.title = title;
+    if (title) {
+      product.title = title;
+      product.slug = slug;
+    }
     if (subtitle) product.subtitle = subtitle;
     if (description) product.description = description;
     if (parentCategory) product.parentCategory = parentCategory;
     if (subCategory) product.subCategory = subCategory;
     if (status) product.status = status;
-    if (uspPoints) {
-      try {
-        product.uspPoints = JSON.parse(uspPoints);
-      } catch {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid uspPoints format",
-        });
-      }
+
+    if (uspPoints !== undefined) {
+      product.uspPoints = safeParse(uspPoints, []);
     }
+
     if (featured !== undefined) {
       product.featured = featured === "true" || featured === true;
     }
 
     /* ---------- REMOVE IMAGES ---------- */
     if (removeImages) {
-      let ids = [];
-      try {
-        ids = JSON.parse(removeImages);
-      } catch {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid removeImages format",
-        });
-      }
-
+      const ids = safeParse(removeImages, [])
       product.images = product.images.filter(
         (img) => !ids.includes(img.public_id)
       );
+      for (const id of ids) {
+        await cloudinary.uploader.destroy(id);
+      }
     }
-
 
     /* ---------- REMOVE FEATURE PICTURES ---------- */
     if (removeFeaturePictures) {
-      const ids = JSON.parse(removeFeaturePictures);
-
+      const ids = safeParse(removeFeaturePictures, []);
       product.featurePictures = product.featurePictures.filter(
         (img) => !ids.includes(img.public_id)
       );
-
-      // optional: cloudinary delete
       for (const id of ids) {
-        try {
-          await deleteFromCloudinary(id);
-        } catch (err) {
-          console.warn("Cloudinary delete failed:", id);
-        }
+        await cloudinary.uploader.destroy(id);
       }
-
     }
-
 
     /* ---------- REMOVE VIDEOS ---------- */
     if (removeVideos) {
-      const paths = JSON.parse(removeVideos);
-
+      const paths = safeParse(removeVideos, []);
       await deletePdfFromSupabase(paths);
-      console.log("🧨 DELETE REQUEST PATHS:", paths);
-
-
       product.videos = product.videos.filter(
         (v) => !paths.includes(v.path)
       );
     }
 
-
     /* ---------- REMOVE PDFs ---------- */
     if (removeQuickstartIndices) {
-      const indices = JSON.parse(removeQuickstartIndices);
+      const indices = safeParse(removeQuickstartIndices, []);
       product.pdf.quickstartpdfs =
         product.pdf.quickstartpdfs.filter((_, i) => !indices.includes(i));
     }
 
     if (removeDownloadIndices) {
-      const indices = JSON.parse(removeDownloadIndices);
+      const indices = safeParse(removeDownloadIndices, []);
       product.pdf.downloadpdfs =
         product.pdf.downloadpdfs.filter((_, i) => !indices.includes(i));
     }
@@ -264,12 +348,8 @@ exports.updateProduct = async (req, res) => {
 
     /* ---------- ADD FEATURE PICTURES ---------- */
     const newFeaturePictures = req.files?.featurePictures || [];
-
     if (newFeaturePictures.length) {
-      const total =
-        product.featurePictures.length + newFeaturePictures.length;
-
-      if (total > 10) {
+      if (product.featurePictures.length + newFeaturePictures.length > 10) {
         return res.status(400).json({
           success: false,
           message: "Maximum 10 feature pictures allowed",
@@ -280,7 +360,7 @@ exports.updateProduct = async (req, res) => {
         newFeaturePictures.map((file) =>
           uploadToCloudinary(
             file.buffer,
-            `products/featurepictures/${slug}`, // ⭐ REQUIRED FOLDER
+            `products/featurepictures/${slug}`,
             file.mimetype,
             file.originalname
           )
@@ -295,74 +375,39 @@ exports.updateProduct = async (req, res) => {
       );
     }
 
-    /* ---------- PARAMETERS (EDIT + DELETE SAFE) ---------- */
+    /* ---------- PARAMETERS ---------- */
     if (parameters !== undefined) {
-      let parsedParameters;
-
-      try {
-        parsedParameters = JSON.parse(parameters);
-      } catch (err) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid parameters format",
-        });
-      }
-
-      // 🛡️ Defensive validation (optional but recommended)
-      if (!Array.isArray(parsedParameters)) {
-        return res.status(400).json({
-          success: false,
-          message: "Parameters must be an array",
-        });
-      }
-
-      // 🧹 Clean & normalize data (frontend UX ke hisaab se)
-      product.parameters = parsedParameters
-        .filter((p) => p && typeof p === "object")
-        .map((p) => ({
-          title: p.title || "",
-          items: Array.isArray(p.items)
-            ? p.items
-              .filter((i) => i && typeof i === "object")
-              .map((i) => ({
-                title: i.title || "",
-                subtitle: i.subtitle || "",
-              }))
-            : [],
-        }));
+      product.parameters = safeParse(parameters, []);
     }
-
 
 
     /* ---------- ADD VIDEOS ---------- */
     const newVideos = req.files?.videos || [];
-    for (const file of newVideos) {
-      const result = await uploadPdfToSupabase(
-        file,
-        `products/${slug}/videos`
-      );
-      product.videos.push(result);
-    }
+    const uploadedVideos = await Promise.all(
+      newVideos.map((file) =>
+        uploadPdfToSupabase(file, `products/${slug}/videos`)
+      )
+    );
+    product.videos.push(...uploadedVideos);
 
     /* ---------- ADD PDFs ---------- */
     const quickstartPdfs = req.files?.quickstartpdfs || [];
     const downloadPdfs = req.files?.downloadpdfs || [];
 
-    for (const file of quickstartPdfs) {
-      const result = await uploadPdfToSupabase(
-        file,
-        `products/${slug}/quickstart`
-      );
-      product.pdf.quickstartpdfs.push(result);
-    }
+    const newQuick = await Promise.all(
+      quickstartPdfs.map((file) =>
+        uploadPdfToSupabase(file, `products/${slug}/quickstart`)
+      )
+    );
 
-    for (const file of downloadPdfs) {
-      const result = await uploadPdfToSupabase(
-        file,
-        `products/${slug}/download`
-      );
-      product.pdf.downloadpdfs.push(result);
-    }
+    const newDownload = await Promise.all(
+      downloadPdfs.map((file) =>
+        uploadPdfToSupabase(file, `products/${slug}/download`)
+      )
+    );
+
+    product.pdf.quickstartpdfs.push(...newQuick);
+    product.pdf.downloadpdfs.push(...newDownload);
 
     await product.save();
 
@@ -381,97 +426,79 @@ exports.updateProduct = async (req, res) => {
   }
 };
 
-
+/* ===================== GET PRODUCT ===================== */
 exports.getProduct = async (req, res) => {
   try {
-    const { parentCategory, subCategory } = req.params
+    const { parentCategory, subCategory } = req.params;
 
-    if (!parentCategory || !subCategory) {
-      return res.status(400).json({
-        success: false,
-        message: "Parent & Subcategory Should be required"
-      })
-    }
+    const product = await Product.findOne({
+      parentCategory,
+      subCategory,
+      status: "active",
+    });
 
-    const isexists = await Product.findOne({
-      parentCategory, subCategory, status: "active"
-    })
-
-    if (!isexists) {
+    if (!product) {
       return res.status(404).json({
         success: false,
-        message: "Product not found with given Parent & SubCategory",
-      })
+        message: "Product not found",
+      });
     }
 
     return res.status(200).json({
       success: true,
-      message: "Data Fetched sucessfully",
-      category: isexists
-    })
-
-
-  }
-  catch (error) {
-    console.error("Get Product Error:", error);
+      message: "Data fetched successfully",
+      product,
+    });
+  } catch (error) {
+    console.error("GET PRODUCT ERROR:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal Server Error"
-    })
+      message: "Internal Server Error",
+    });
   }
-}
+};
 
+/* ===================== GET ALL PRODUCTS ===================== */
 exports.getallProducts = async (req, res) => {
   try {
-    const allproducts = await Product.find()
-
-    if (allproducts.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Products not found"
-      })
-    }
+    const allproducts = await Product.find();
 
     return res.status(200).json({
       success: true,
-      message: "All Proucts data fetched sucessfully",
-      allproducts
-    })
-  }
-  catch (error) {
-    console.error("All Products error", error)
+      message: "All products fetched successfully",
+      allproducts,
+    });
+  } catch (error) {
+    console.error("ALL PRODUCTS ERROR:", error);
     return res.status(500).json({
       success: false,
       message: "Internal Server Error",
-      error: error.message
-    })
+    });
   }
-}
+};
 
-exports.getfeaturedProduts = async (req, res) => {
+/* ===================== GET FEATURED PRODUCTS ===================== */
+exports.getFeaturedProducts = async (req, res) => {
   try {
-    const featuredProducts = await Product.find({ featured: true })
+    const featuredProducts = await Product.find({ featured: true });
 
-    if (!featuredProducts) {
+    if (featuredProducts.length === 0) {
       return res.status(404).json({
         success: false,
-        message: "Featured Product not Found."
-      })
+        message: "No featured products found",
+      });
     }
 
     return res.status(200).json({
       success: true,
-      message: "Featured Product fetched successfully",
-      featuredProducts
-    })
-
-  }
-  catch (error) {
+      message: "Featured products fetched successfully",
+      featuredProducts,
+    });
+  } catch (error) {
     return res.status(500).json({
-      sucess: false,
+      success: false,
       message: "Internal Server Error",
-      error
-    })
+      error: error.message,
+    });
   }
-}
-
+};
