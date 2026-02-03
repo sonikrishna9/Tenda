@@ -7,7 +7,8 @@ const {
   getallProducts,
   updateProduct,
   getFeaturedProducts,
-  deleteProduct
+  deleteProduct,
+  getallparentcategory
 } = require("../controller/productController.js");
 
 const router = express.Router();
@@ -25,7 +26,9 @@ router.get("/allproducts", getallProducts);
 /* GET SINGLE PRODUCT */
 router.get("/single-product/:parentCategory/:subCategory", getProduct);
 router.get("/featuredproducts", getFeaturedProducts);
+router.get("/all-categories", getallparentcategory);
 router.delete("/delete/:id", deleteProduct);
+
 
 /* UPDATE PRODUCT */
 router.put(

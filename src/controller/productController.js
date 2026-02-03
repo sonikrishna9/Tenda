@@ -477,6 +477,23 @@ exports.getallProducts = async (req, res) => {
   }
 };
 
+exports.getallparentcategory = async (req, res) => {
+  try {
+    const allproducts = await Product.find({}, '-__v -createdAt -updatedAt -images -pdf -videos -featurePictures -parameters -description -uspPoints');
+
+    return res.status(200).json({
+      success: true,
+      message: "All products fetched successfully",
+      allproducts,
+    });
+  } catch (error) {
+    console.error("ALL PRODUCTS ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
+};
 /* ===================== GET FEATURED PRODUCTS ===================== */
 exports.getFeaturedProducts = async (req, res) => {
   try {
