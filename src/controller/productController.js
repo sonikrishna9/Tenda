@@ -429,11 +429,11 @@ exports.updateProduct = async (req, res) => {
 /* ===================== GET PRODUCT ===================== */
 exports.getProduct = async (req, res) => {
   try {
-    const { parentCategory, subCategory } = req.params;
+    const { parentCategory, productTitle } = req.params;
 
     const product = await Product.findOne({
       parentCategory,
-      subCategory,
+      title: productTitle,
       status: "active",
     });
 

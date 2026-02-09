@@ -24,7 +24,12 @@ router.post(
 router.get("/allproducts", getallProducts);
 
 /* GET SINGLE PRODUCT */
-router.get("/single-product/:parentCategory/:subCategory", getProduct);
+// example
+router.get(
+  "/single-product/:parentCategory/:productTitle",
+  getProduct
+);
+
 router.get("/featuredproducts", getFeaturedProducts);
 router.get("/all-categories", getallparentcategory);
 router.delete("/delete/:id", deleteProduct);
