@@ -431,11 +431,23 @@ exports.getProduct = async (req, res) => {
   try {
     const { parentCategory, productTitle } = req.params;
 
-    const product = await Product.findOne({
-      parentCategory,
-      title: productTitle,
-      status: "active",
-    });
+    // slugify function SAME as frontend
+    const slugify = (s = "") =>
+      s
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/[^\w-]+/g, "")
+        .replace(/--+/g, "-");
+
+    // fetch all matching parentCategory candidates first
+    const products = await Product.find({ status: "active" });
+
+    const product = products.find(p =>
+      slugify(p.parentCategory) === parentCategory.toLowerCase() &&
+      slugify(p.title) === productTitle.toLowerCase()
+    );
 
     if (!product) {
       return res.status(404).json({
@@ -449,6 +461,7 @@ exports.getProduct = async (req, res) => {
       message: "Data fetched successfully",
       product,
     });
+
   } catch (error) {
     console.error("GET PRODUCT ERROR:", error);
     return res.status(500).json({
@@ -457,6 +470,36 @@ exports.getProduct = async (req, res) => {
     });
   }
 };
+// exports.getProduct = async (req, res) => {
+//   try {
+//     const { parentCategory, productTitle } = req.params;
+
+//     const product = await Product.findOne({
+//       parentCategory,
+//       title: productTitle,
+//       status: "active",
+//     });
+
+//     if (!product) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Product not found",
+//       });
+//     }
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Data fetched successfully",
+//       product,
+//     });
+//   } catch (error) {
+//     console.error("GET PRODUCT ERROR:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Internal Server Error",
+//     });
+//   }
+// };
 
 /* ===================== GET ALL PRODUCTS ===================== */
 exports.getallProducts = async (req, res) => {

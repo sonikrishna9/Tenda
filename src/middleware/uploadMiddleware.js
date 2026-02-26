@@ -27,6 +27,7 @@ const upload = multer({
 module.exports = {
   uploadMixed: upload.fields([
     { name: "images", maxCount: 7 },
+    { name: "bannerImage", maxCount: 1 },
     { name: "featurePictures", maxCount: 10 }, // ⭐ NEW
     { name: "videos", maxCount: 10 },
     { name: "quickstartpdfs", maxCount: 10 },
