@@ -34,6 +34,7 @@ app.use("/api/admin/slider", require("./src/routes/Sliderroutes.js"));
 app.use("/api/slider", require("./src/routes/common/sliderRoutes.js")); 
 
 app.use("/api/subcategory", require("./src/routes/subcategoryBannerRoutes.js"));  
+app.use("/api/parentcategorybanner", require("./src/routes/parentcateogryBannerRoutes.js"));  
 
 
 
