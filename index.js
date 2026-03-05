@@ -29,6 +29,8 @@ app.use(express.urlencoded({
 app.use("/api/product", require("./src/routes/productRoutes.js"));
 app.use("/api/parentcategory", require("./src/routes/parentcategoryRoute.js"));
 app.use("/api/blog", require("./src/routes/blogroute.js"));
+app.use("/api/gallery", require("./src/routes/galleryRoutes.js"));
+app.use("/api/news", require("./src/routes/newsRoutes.js"));
 
 app.use("/api/admin/slider", require("./src/routes/Sliderroutes.js")); 
 app.use("/api/slider", require("./src/routes/common/sliderRoutes.js")); 
