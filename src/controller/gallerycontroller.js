@@ -1,4 +1,4 @@
-const Gallery = require("../model/galleryModel");
+const Gallery = require("../model/gallerymodel");
 const cloudinary = require("../../config/cloudinary");
 const slugify = require("../utils/slugify");
 
