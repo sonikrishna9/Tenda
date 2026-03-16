@@ -1,6 +1,7 @@
 const bcrypt = require("bcryptjs");
 const Admin = require("../model/Admin");
 const { generateToken } = require("../utils/generateToken");
+const jwt = require("jsonwebtoken");
 
 const adminLogin = async (req, res) => {
 
@@ -28,18 +29,15 @@ const adminLogin = async (req, res) => {
 
         const token = generateToken(admin);
 
-        /* COOKIE SET */
-
-        res.cookie("adminToken", token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "none",
-            maxAge: 24 * 60 * 60 * 1000
-        });
-
         res.status(200).json({
             success: true,
-            message: "Login successful"
+            message: "Login successful",
+            token,
+            admin: {
+                id: admin._id,
+                name: admin.name,
+                email: admin.email
+            }
         });
 
     } catch (error) {
@@ -88,7 +86,6 @@ const resetPassword = async (req, res) => {
     }
 
 };
-
 
 const registerAdmin = async (req, res) => {
     try {
