@@ -28,23 +28,16 @@ const adminLogin = async (req, res) => {
 
         const token = generateToken(admin);
 
-        // Production
+        /* COOKIE SET */
+
         res.cookie("adminToken", token, {
             httpOnly: true,
-            secure: true,
+            secure: process.env.NODE_ENV === "production",
             sameSite: "none",
             maxAge: 24 * 60 * 60 * 1000
         });
 
-        // Local
-        // res.cookie("adminToken", token, {
-        //     httpOnly: false,
-        //     secure: false, // true in production
-        //     sameSite: "lax",
-        //     maxAge: 24 * 60 * 60 * 1000
-        // });
-
-        res.json({
+        res.status(200).json({
             success: true,
             message: "Login successful"
         });
@@ -57,10 +50,7 @@ const adminLogin = async (req, res) => {
         });
 
     }
-
 };
-
-
 
 const resetPassword = async (req, res) => {
 

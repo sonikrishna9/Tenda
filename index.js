@@ -8,22 +8,25 @@ Dbconnect();
 
 const app = express();
 
-/* ✅ CORS (LOCAL + LIVE BOTH) */
+/* TRUST PROXY (REQUIRED FOR RENDER) */
+app.set("trust proxy", 1);
+
+/* CORS CONFIG */
 app.use(
   cors({
-    origin: true, // 👈 allow all origins
+    origin: [
+      "http://localhost:5173", 
+      "http://localhost:5174", 
+      "https://tenda-frontend-pa94.vercel.app",
+      "https://tenda-frontend.vercel.app",
+    ],
     methods: ["GET", "POST", "PUT", "DELETE"],
-    credentials: true,
+    credentials: true
   })
 );
 
-
-app.use(express.json({
-  strict: false
-}));
-app.use(express.urlencoded({
-  extended: true
-}));
+app.use(express.json({ strict: false }));
+app.use(express.urlencoded({ extended: true }));
 
 /* Admin Routes */
 
@@ -37,8 +40,6 @@ app.use("/api/admin/parentcategorybanner", require("./src/routes/admin/ParentCat
 app.use("/api/admin/gallery", require("./src/routes/admin/GalleryRoutes.js"));
 app.use("/api/admin/news", require("./src/routes/admin/NewsRoute.js"));
 app.use("/api/admin/company", require("./src/routes/admin/CompanyBuyRoute.js"));  
-
-
 
 /* Frontend Routes */
 
@@ -54,9 +55,8 @@ app.use("/api/subcategory", require("./src/routes/subcategoryBannerRoutes.js"));
 app.use("/api/parentcategorybanner", require("./src/routes/parentcateogryBannerRoutes.js"));  
 app.use("/api/company", require("./src/routes/companyRoutes.js"));  
 
-
-
 const PORT = process.env.PORT || 8080;
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
