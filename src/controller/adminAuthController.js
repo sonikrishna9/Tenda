@@ -28,12 +28,21 @@ const adminLogin = async (req, res) => {
 
         const token = generateToken(admin);
 
+        // Production
         res.cookie("adminToken", token, {
-            httpOnly: false,
-            secure: false, // true in production
-            sameSite: "lax",
+            httpOnly: true,
+            secure: true,
+            sameSite: "none",
             maxAge: 24 * 60 * 60 * 1000
         });
+
+        // Local
+        // res.cookie("adminToken", token, {
+        //     httpOnly: false,
+        //     secure: false, // true in production
+        //     sameSite: "lax",
+        //     maxAge: 24 * 60 * 60 * 1000
+        // });
 
         res.json({
             success: true,
