@@ -40,12 +40,8 @@ exports.createProduct = async (req, res) => {
       status,
       featured,
       parameters,
+      buylink
     } = req.body;
-
-    // console.log("PARAMETERS RAW:", parameters);
-    // console.log("PARSED:", parameters ? JSON.parse(parameters) : []);
-
-
 
     if (!title || !description || !parentCategory) {
       return res.status(400).json({
@@ -85,7 +81,6 @@ exports.createProduct = async (req, res) => {
       )
     );
 
-
     /* ---------- VIDEOS → SUPABASE ---------- */
     const uploadedVideos = await Promise.all(
       videos.map((file) =>
@@ -106,6 +101,29 @@ exports.createProduct = async (req, res) => {
       )
     );
 
+    /* ---------- BUY LINKS ---------- */
+
+    let parsedBuyLinks = safeParse(buylink, []);
+
+    if (parsedBuyLinks.length > 10) {
+      return res.status(400).json({
+        success: false,
+        message: "Maximum 10 buy links allowed",
+      });
+    }
+
+    parsedBuyLinks = parsedBuyLinks.map((company) => ({
+      companyname: company.companyname,
+      items: [
+        {
+          image: company.items?.[0]?.image || "", // logo URL
+          link: company.items?.[0]?.link || "",
+        },
+      ],
+    }));
+
+    /* ---------- CREATE PRODUCT ---------- */
+
     const product = await Product.create({
       title,
       subtitle,
@@ -115,6 +133,7 @@ exports.createProduct = async (req, res) => {
       parentCategory,
       subCategory,
       status,
+      buylink: parsedBuyLinks,
       featured: featured === "true" || featured === true,
       parameters: safeParse(parameters, []),
 
@@ -127,8 +146,9 @@ exports.createProduct = async (req, res) => {
         url: img.secure_url,
         public_id: img.public_id,
       })),
-      // SAFE DEFAULT
+
       videos: uploadedVideos,
+
       pdf: { quickstartpdfs, downloadpdfs },
     });
 
@@ -137,15 +157,20 @@ exports.createProduct = async (req, res) => {
       message: "Product created successfully",
       product,
     });
+
   } catch (error) {
+
     console.error("CREATE PRODUCT ERROR:", error);
+
     return res.status(500).json({
       success: false,
       message: "Internal Server Error",
       error: error.message,
     });
+
   }
 };
+
 
 /* ===================== DELETE PRODUCT ===================== */
 exports.deleteProduct = async (req, res) => {
@@ -225,7 +250,9 @@ exports.deleteProduct = async (req, res) => {
 /* ===================== UPDATE PRODUCT ===================== */
 exports.updateProduct = async (req, res) => {
   try {
+
     const product = await Product.findById(req.params.id);
+
     if (!product) {
       return res.status(404).json({
         success: false,
@@ -234,10 +261,12 @@ exports.updateProduct = async (req, res) => {
     }
 
     /* ---------- SAFE NORMALIZATION ---------- */
+
     product.images = normalizeArray(product.images);
     product.featurePictures = normalizeArray(product.featurePictures);
     product.videos = normalizeArray(product.videos);
     product.pdf = normalizePdf(product.pdf);
+    product.buylink = normalizeArray(product.buylink);
 
     const {
       title,
@@ -249,7 +278,7 @@ exports.updateProduct = async (req, res) => {
       uspPoints,
       featured,
       parameters,
-
+      buylink,
       removeImages,
       removeFeaturePictures,
       removeVideos,
@@ -263,10 +292,12 @@ exports.updateProduct = async (req, res) => {
     });
 
     /* ---------- BASIC FIELDS ---------- */
+
     if (title) {
       product.title = title;
       product.slug = slug;
     }
+
     if (subtitle) product.subtitle = subtitle;
     if (description) product.description = description;
     if (parentCategory) product.parentCategory = parentCategory;
@@ -282,52 +313,104 @@ exports.updateProduct = async (req, res) => {
     }
 
     /* ---------- REMOVE IMAGES ---------- */
+
     if (removeImages) {
-      const ids = safeParse(removeImages, [])
+
+      const ids = safeParse(removeImages, []);
+
       product.images = product.images.filter(
         (img) => !ids.includes(img.public_id)
       );
+
       for (const id of ids) {
         await cloudinary.uploader.destroy(id);
       }
+
     }
 
     /* ---------- REMOVE FEATURE PICTURES ---------- */
+
     if (removeFeaturePictures) {
+
       const ids = safeParse(removeFeaturePictures, []);
+
       product.featurePictures = product.featurePictures.filter(
         (img) => !ids.includes(img.public_id)
       );
+
       for (const id of ids) {
         await cloudinary.uploader.destroy(id);
       }
+
     }
 
     /* ---------- REMOVE VIDEOS ---------- */
+
     if (removeVideos) {
+
       const paths = safeParse(removeVideos, []);
+
       await deletePdfFromSupabase(paths);
+
       product.videos = product.videos.filter(
         (v) => !paths.includes(v.path)
       );
+
     }
 
     /* ---------- REMOVE PDFs ---------- */
+
     if (removeQuickstartIndices) {
+
       const indices = safeParse(removeQuickstartIndices, []);
+
       product.pdf.quickstartpdfs =
         product.pdf.quickstartpdfs.filter((_, i) => !indices.includes(i));
+
     }
 
     if (removeDownloadIndices) {
+
       const indices = safeParse(removeDownloadIndices, []);
+
       product.pdf.downloadpdfs =
         product.pdf.downloadpdfs.filter((_, i) => !indices.includes(i));
+
+    }
+
+    /* ---------- UPDATE BUYLINK ---------- */
+
+    if (buylink !== undefined) {
+
+      let parsedBuyLinks = safeParse(buylink, []);
+
+      if (parsedBuyLinks.length > 10) {
+        return res.status(400).json({
+          success: false,
+          message: "Maximum 10 buy links allowed",
+        });
+      }
+
+      parsedBuyLinks = parsedBuyLinks.map((company) => ({
+        companyname: company.companyname,
+        items: [
+          {
+            image: company.items?.[0]?.image || "",
+            link: company.items?.[0]?.link || "",
+          },
+        ],
+      }));
+
+      product.buylink = parsedBuyLinks;
+
     }
 
     /* ---------- ADD IMAGES ---------- */
+
     const newImages = req.files?.images || [];
+
     if (newImages.length) {
+
       const uploaded = await Promise.all(
         newImages.map((file) =>
           uploadToCloudinary(
@@ -338,17 +421,22 @@ exports.updateProduct = async (req, res) => {
           )
         )
       );
+
       product.images.push(
         ...uploaded.map((img) => ({
           url: img.secure_url,
           public_id: img.public_id,
         }))
       );
+
     }
 
     /* ---------- ADD FEATURE PICTURES ---------- */
+
     const newFeaturePictures = req.files?.featurePictures || [];
+
     if (newFeaturePictures.length) {
+
       if (product.featurePictures.length + newFeaturePictures.length > 10) {
         return res.status(400).json({
           success: false,
@@ -360,7 +448,7 @@ exports.updateProduct = async (req, res) => {
         newFeaturePictures.map((file) =>
           uploadToCloudinary(
             file.buffer,
-            `products/featurepictures/${slug}`,
+            `products/feature-pictures/${slug}`,
             file.mimetype,
             file.originalname
           )
@@ -373,24 +461,29 @@ exports.updateProduct = async (req, res) => {
           public_id: img.public_id,
         }))
       );
+
     }
 
     /* ---------- PARAMETERS ---------- */
+
     if (parameters !== undefined) {
       product.parameters = safeParse(parameters, []);
     }
 
-
     /* ---------- ADD VIDEOS ---------- */
+
     const newVideos = req.files?.videos || [];
+
     const uploadedVideos = await Promise.all(
       newVideos.map((file) =>
         uploadPdfToSupabase(file, `products/${slug}/videos`)
       )
     );
+
     product.videos.push(...uploadedVideos);
 
     /* ---------- ADD PDFs ---------- */
+
     const quickstartPdfs = req.files?.quickstartpdfs || [];
     const downloadPdfs = req.files?.downloadpdfs || [];
 
@@ -416,15 +509,20 @@ exports.updateProduct = async (req, res) => {
       message: "Product updated successfully",
       product,
     });
+
   } catch (error) {
+
     console.error("UPDATE PRODUCT ERROR:", error);
+
     return res.status(500).json({
       success: false,
       message: "Internal Server Error",
       error: error.message,
     });
+
   }
 };
+
 
 /* ===================== GET PRODUCT ===================== */
 exports.getProduct = async (req, res) => {

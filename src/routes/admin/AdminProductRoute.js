@@ -1,6 +1,6 @@
 const express = require("express");
-const { uploadMixed } = require("../middleware/uploadMiddleware");
-const { verifyAdminToken } = require("../middleware/verifyAdminToken.js");
+const { uploadMixed } = require("../../middleware/uploadMiddleware.js");
+const { verifyAdminToken } = require("../../middleware/verifyAdminToken.js");
 const {
   createProduct,
   getProduct,
@@ -9,14 +9,13 @@ const {
   getFeaturedProducts,
   deleteProduct,
   getallparentcategory
-} = require("../controller/productController.js");
+} = require("../../controller/productController.js");
 
 const router = express.Router();
 
 
 // Admin get routes
 
-router.get("/all-categories", getallparentcategory);
 
 
 /* CREATE PRODUCT */
@@ -28,24 +27,26 @@ router.post(
 );
 
 /* GET ALL PRODUCTS */
-router.get("/allproducts", getallProducts);
+router.get("/allproducts",verifyAdminToken, getallProducts);
 
 /* GET SINGLE PRODUCT */
 // example
 router.get(
   "/single-product/:parentCategory/:productTitle",
+  verifyAdminToken,
   getProduct
 );
 
-router.get("/featuredproducts", getFeaturedProducts);
-router.get("/all-categories", getallparentcategory);
-router.delete("/delete/:id", deleteProduct);
+router.get("/featuredproducts", verifyAdminToken,getFeaturedProducts);
+router.get("/all-categories",verifyAdminToken, getallparentcategory);
+router.delete("/delete/:id",verifyAdminToken, deleteProduct);
 
 
 /* UPDATE PRODUCT */
 router.put(
   "/update/:id",
   uploadMixed,
+  verifyAdminToken,
   updateProduct
 );
 

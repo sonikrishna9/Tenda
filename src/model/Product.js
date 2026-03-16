@@ -39,6 +39,19 @@ const productSchema = new mongoose.Schema(
       },
     ],
 
+    // 🛒 BUY LINKS
+    buylink: [
+      {
+        companyname: String,
+        items: [
+          {
+            image: String,
+            link: String,
+          },
+        ],
+      },
+    ],
+
     // 🎥 VIDEOS → SUPABASE
     videos: [
       {
