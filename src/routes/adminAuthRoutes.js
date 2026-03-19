@@ -3,7 +3,8 @@ const express = require("express");
 const {
     adminLogin,
     registerAdmin,
-    resetPassword
+    resetPassword,
+    adminLogout
 } = require("../controller/adminAuthController");
 
 const { verifyAdminToken } = require("../middleware/verifyAdminToken");
@@ -18,5 +19,6 @@ router.post("/register", verifyAdminToken, registerAdmin);
 
 router.post("/reset-password", verifyAdminToken, resetPassword);
 
+router.post("/logout", adminLogout);
 
 module.exports = router;

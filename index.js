@@ -54,7 +54,9 @@ app.use("/api/slider", require("./src/routes/common/sliderRoutes.js"));
 
 app.use("/api/subcategory", require("./src/routes/subcategoryBannerRoutes.js"));  
 app.use("/api/parentcategorybanner", require("./src/routes/parentcateogryBannerRoutes.js"));  
-app.use("/api/company", require("./src/routes/companyRoutes.js"));  
+app.use("/api/company", require("./src/routes/companyRoutes.js")); 
+app.use("/api/videos", require("./src/routes/VideoRoute.js")); 
+
 
 const PORT = process.env.PORT || 8080;
 
