@@ -41,6 +41,7 @@ app.use("/api/admin/parentcategorybanner", require("./src/routes/admin/ParentCat
 app.use("/api/admin/gallery", require("./src/routes/admin/GalleryRoutes.js"));
 app.use("/api/admin/news", require("./src/routes/admin/NewsRoute.js"));
 app.use("/api/admin/company", require("./src/routes/admin/CompanyBuyRoute.js"));  
+app.use("/api/admin/videos", require("./src/routes/admin/VideoRoute.js")); 
 
 /* Frontend Routes */
 

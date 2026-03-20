@@ -2,33 +2,61 @@
 
 const Video = require("../model/Video.js");
 
-// CREATE / UPDATE
+/* ================= CREATE / UPDATE ================= */
 const upsertVideos = async (req, res) => {
   try {
     const { slug, videos } = req.body;
 
-    if (!slug || !videos || !Array.isArray(videos)) {
+    // ✅ VALIDATIONS
+    if (!slug || !Array.isArray(videos)) {
       return res.status(400).json({
         success: false,
         message: "Slug and videos array required",
       });
     }
 
-    if (videos.length > 12) {
+    const cleanVideos = videos
+      .map((v) => v.trim())
+      .filter((v) => v !== "");
+
+    if (cleanVideos.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one video required",
+      });
+    }
+
+    if (cleanVideos.length > 12) {
       return res.status(400).json({
         success: false,
         message: "Max 12 videos allowed",
       });
     }
 
+    // ✅ REMOVE DUPLICATES
+    const uniqueVideos = [...new Set(cleanVideos)];
+
+    // ✅ UPSERT WITH SAFE UPDATE
     const data = await Video.findOneAndUpdate(
       { slug },
-      { videos },
-      { new: true, upsert: true }
+      {
+        $set: {
+          slug,
+          videos: uniqueVideos,
+        },
+      },
+      {
+        new: true,
+        upsert: true,
+      }
     );
+
+    // ✅ DEBUG (optional remove later)
+    console.log("Saved Data:", data);
 
     res.status(200).json({
       success: true,
+      message: "Videos saved successfully",
       data,
     });
   } catch (error) {
@@ -39,10 +67,17 @@ const upsertVideos = async (req, res) => {
   }
 };
 
-// GET BY SLUG
+/* ================= GET BY SLUG ================= */
 const getVideosBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
+
+    if (!slug) {
+      return res.status(400).json({
+        success: false,
+        message: "Slug is required",
+      });
+    }
 
     const data = await Video.findOne({ slug });
 
@@ -65,10 +100,10 @@ const getVideosBySlug = async (req, res) => {
   }
 };
 
-// GET ALL
+/* ================= GET ALL ================= */
 const getAllVideos = async (req, res) => {
   try {
-    const data = await Video.find();
+    const data = await Video.find().sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -83,10 +118,17 @@ const getAllVideos = async (req, res) => {
   }
 };
 
-// DELETE
+/* ================= DELETE ================= */
 const deleteBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
+
+    if (!slug) {
+      return res.status(400).json({
+        success: false,
+        message: "Slug is required",
+      });
+    }
 
     const data = await Video.findOneAndDelete({ slug });
 
@@ -109,7 +151,6 @@ const deleteBySlug = async (req, res) => {
   }
 };
 
-// ✅ EXPORT (IMPORTANT)
 module.exports = {
   upsertVideos,
   getVideosBySlug,

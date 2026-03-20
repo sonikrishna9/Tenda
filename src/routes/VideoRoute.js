@@ -8,11 +8,18 @@ const {
   deleteBySlug,
 } = require("../controller/VideoController.js");
 
-// ROUTES
-router.post("/create", upsertVideos);
-router.get("/getall", getAllVideos);
-router.get("/update/:slug", getVideosBySlug);
-router.delete("/delete/:slug", deleteBySlug);
 
-// ✅ EXPORT CORRECTLY
+
+// CREATE / UPDATE
+router.post("/",upsertVideos);
+
+// GET ALL
+router.get("/", getAllVideos);
+
+// GET BY SLUG
+router.get("/:slug", getVideosBySlug);
+
+// DELETE
+router.delete("/:slug", deleteBySlug);
+
 module.exports = router;
