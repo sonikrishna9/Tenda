@@ -4,19 +4,23 @@ const parentcategoryschema = new mongoose.Schema(
   {
     categoryname: {
       type: String,
-      required: [true, "Category Name should be required"],
+      required: true,
       trim: true
     },
 
-    images: {
-      url: {
-        type: String,
-        required: [true, "Image URL is required"]
-      },
-      public_id: {
-        type: String,
-        required: [true, "Image public_id is required"]
+    subcategories: [
+      {
+        name: {
+          type: String,
+          required: true,
+          trim: true
+        }
       }
+    ],
+
+    images: {
+      url: String,
+      public_id: String
     },
 
     status: {
