@@ -5,6 +5,8 @@ const {
   createProduct,
   getProduct,
   getallProducts,
+  getallfrontendparentcategory,
+  getallProductsFrontend,
   updateProduct,
   getFeaturedProducts,
   deleteProduct,
@@ -16,7 +18,7 @@ const router = express.Router();
 
 // Admin get routes
 
-router.get("/all-categories", getallparentcategory);
+router.get("/all-categories", getallfrontendparentcategory);
 
 
 /* CREATE PRODUCT */
@@ -28,7 +30,7 @@ router.post(
 );
 
 /* GET ALL PRODUCTS */
-router.get("/allproducts", getallProducts);
+router.get("/allproducts", getallProductsFrontend);
 
 /* GET SINGLE PRODUCT */
 // example

@@ -93,6 +93,32 @@ exports.getcategory = async (req, res) => {
     }
 }
 
+exports.getfrontendcategory = async (req, res) => {
+    try {
+        const parentcategory = await ParentCategory.find({ status: true })
+
+        if (!parentcategory) {
+            return res.status(404).json({
+                success: false,
+                message: "Parent Category not found"
+            })
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Parent Category Fetched Successfully",
+            parentcategory
+        })
+    }
+    catch (error) {
+        return res.status(500).json({
+            success: true,
+            message: "Internal Server Error",
+            error: error.message
+        })
+    }
+}
+
 exports.updatecategory = async (req, res) => {
     try {
         const category = await ParentCategory.findById(req.params.id);
@@ -104,7 +130,11 @@ exports.updatecategory = async (req, res) => {
             });
         }
 
-        const { categoryname, subcategories } = req.body;
+        const { categoryname, subcategories, status } = req.body;
+
+        if (typeof status !== "undefined") {
+            category.status = status === "true" || status === true;
+        }
 
         if (categoryname) {
             category.categoryname = categoryname.trim();
