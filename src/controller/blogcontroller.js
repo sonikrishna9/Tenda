@@ -1,7 +1,7 @@
 const Blog = require("../model/blogmodel");
-const cloudinary = require("../../config/cloudinary");
 const slugify = require("../utils/slugify.js");
-
+const path = require("path");
+const fs = require("fs");
 
 /* ================= CREATE BLOG ================= */
 exports.createBlog = async (req, res) => {
@@ -17,7 +17,6 @@ exports.createBlog = async (req, res) => {
             author,
         } = req.body;
 
-        /* ---------- BASIC VALIDATION ---------- */
         if (!title || !slug || !excerpt || !content || !category || !author) {
             return res.status(400).json({
                 success: false,
@@ -25,50 +24,37 @@ exports.createBlog = async (req, res) => {
             });
         }
 
+        console.log("FILES:", req.files);
+        console.log("FEATURE FILE:", req.files?.featurePictures);
+
         /* ---------- FEATURED IMAGE ---------- */
-        if (!req.files?.featurePictures?.length) {
+        const featuredFile = req.files?.featurePictures?.[0];
+
+        if (!featuredFile) {
             return res.status(400).json({
                 success: false,
                 message: "Featured image is required",
             });
         }
 
-        const featuredFile = req.files.featurePictures[0];
-
-        const featuredUpload = await cloudinary.uploader.upload(
-            `data:${featuredFile.mimetype};base64,${featuredFile.buffer.toString("base64")}`,
-            {
-                folder: "blogs/featured",
-                resource_type: "image",
-            }
-        );
+        const BASE_URL = process.env.BASE_URL || "http://localhost:8080";
 
         const featuredImage = {
-            url: featuredUpload.secure_url,
-            public_id: featuredUpload.public_id,
+            url: `${BASE_URL}/uploads/products/feature-pictures/${featuredFile.filename}`,
+            public_id: featuredFile.filename,
         };
 
-        /* ---------- GALLERY IMAGES ---------- */
+        /* ---------- GALLERY ---------- */
         let gallery = [];
 
         if (req.files?.images?.length) {
-            for (const file of req.files.images) {
-                const upload = await cloudinary.uploader.upload(
-                    `data:${file.mimetype};base64,${file.buffer.toString("base64")}`,
-                    {
-                        folder: "blogs/gallery",
-                        resource_type: "image",
-                    }
-                );
-
-                gallery.push({
-                    url: upload.secure_url,
-                    public_id: upload.public_id,
-                });
-            }
+            gallery = req.files.images.map((file) => ({
+                url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+                public_id: file.filename,
+            }));
         }
 
-        /* ---------- CREATE BLOG ---------- */
+        /* ---------- CREATE ---------- */
         const blog = await Blog.create({
             title,
             slug,
@@ -83,14 +69,15 @@ exports.createBlog = async (req, res) => {
             publishedAt: status === "published" ? new Date() : null,
         });
 
-        return res.status(201).json({
+        res.status(201).json({
             success: true,
             message: "Blog created successfully",
             blog,
         });
+
     } catch (error) {
-        console.error("Create Blog Error:", error);
-        return res.status(500).json({
+        console.error("CREATE BLOG ERROR:", error);
+        res.status(500).json({
             success: false,
             message: "Failed to create blog",
             error: error.message,
@@ -98,51 +85,29 @@ exports.createBlog = async (req, res) => {
     }
 };
 
-
+/* ================= GET ALL ================= */
 exports.getAllBlogs = async (req, res) => {
     try {
-        const { page = 1, limit = 10, category, tag, search } = req.query;
-
-        const query = {}; // 👈 IMPORTANT CHANGE
-
-        if (category) query.category = category;
-        if (tag) query.tags = { $in: [tag] };
-
-        if (search) {
-            query.$text = { $search: search };
-        }
-
-        const blogs = await Blog.find(query)
-            .sort({ createdAt: -1 })
-            .skip((page - 1) * limit)
-            .limit(Number(limit));
-
-        const total = await Blog.countDocuments(query);
+        const blogs = await Blog.find().sort({ createdAt: -1 });
 
         res.status(200).json({
             success: true,
-            total,
-            page: Number(page),
-            pages: Math.ceil(total / limit),
             data: blogs,
         });
+
     } catch (error) {
         res.status(500).json({
             success: false,
             message: "Failed to fetch blogs",
-            error: error.message,
         });
     }
 };
 
-
-
+/* ================= GET BY SLUG ================= */
 exports.getBlogBySlug = async (req, res) => {
     try {
-        const { slug } = req.params;
-
         const blog = await Blog.findOne({
-            slug,
+            slug: req.params.slug,
             status: "published",
         });
 
@@ -157,21 +122,19 @@ exports.getBlogBySlug = async (req, res) => {
             success: true,
             data: blog,
         });
+
     } catch (error) {
         res.status(500).json({
             success: false,
             message: "Failed to fetch blog",
-            error: error.message,
         });
     }
 };
 
 exports.updateBlog = async (req, res) => {
     try {
-        const { id } = req.params;
-        const { removeFeaturedImage } = req.body;
+        const blog = await Blog.findById(req.params.id);
 
-        const blog = await Blog.findById(id);
         if (!blog) {
             return res.status(404).json({
                 success: false,
@@ -179,13 +142,10 @@ exports.updateBlog = async (req, res) => {
             });
         }
 
-        /* ---------- TEXT UPDATE ---------- */
+        /* TEXT UPDATE */
         if (req.body.title) {
             blog.title = req.body.title;
-            blog.slug = slugify(req.body.title, {
-                lower: true,
-                strict: true,
-            });
+            blog.slug = slugify(req.body.title);
         }
 
         if (req.body.excerpt) blog.excerpt = req.body.excerpt;
@@ -198,59 +158,49 @@ exports.updateBlog = async (req, res) => {
             blog.publishedAt = new Date();
         }
 
-        /* ---------- REMOVE FEATURED IMAGE ---------- */
-        if (removeFeaturedImage === "true" && blog.featuredImage?.public_id) {
-            await cloudinary.uploader.destroy(blog.featuredImage.public_id);
-            blog.featuredImage = undefined;
-        }
+        /* FEATURE IMAGE UPDATE */
+        const file = req.files?.featurePictures?.[0];
 
-        /* ---------- REPLACE FEATURED IMAGE ---------- */
-        if (req.files?.featurePictures?.length) {
-            const file = req.files.featurePictures[0];
-
+        if (file) {
+            // delete old
             if (blog.featuredImage?.public_id) {
-                await cloudinary.uploader.destroy(blog.featuredImage.public_id);
+                const oldPath = path.join(
+                    __dirname,
+                    "../../public/uploads/products/images/",
+                    blog.featuredImage.public_id
+                );
+
+                if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
             }
 
-            const upload = await cloudinary.uploader.upload(
-                `data:${file.mimetype};base64,${file.buffer.toString("base64")}`,
-                {
-                    folder: "blogs/featured",
-                }
-            );
+            const BASE_URL = process.env.BASE_URL || "http://localhost:8080";
 
             blog.featuredImage = {
-                url: upload.secure_url,
-                public_id: upload.public_id,
+                url: `${BASE_URL}/uploads/products/feature-pictures/${file.filename}`,
+                public_id: file.filename,
             };
         }
 
         await blog.save();
 
-        return res.status(200).json({
+        res.status(200).json({
             success: true,
             message: "Blog updated successfully",
             blog,
         });
 
     } catch (error) {
-        console.error("UPDATE BLOG ERROR:", error);
-        return res.status(500).json({
+        res.status(500).json({
             success: false,
-            message: "Internal Server Error",
-            error: error.message,
+            message: "Update failed",
         });
     }
 };
 
-
-
-
+/* ================= DELETE ================= */
 exports.deleteBlog = async (req, res) => {
     try {
-        const { id } = req.params;
-
-        const blog = await Blog.findByIdAndDelete(id);
+        const blog = await Blog.findById(req.params.id);
 
         if (!blog) {
             return res.status(404).json({
@@ -259,16 +209,42 @@ exports.deleteBlog = async (req, res) => {
             });
         }
 
+        /* DELETE FEATURE IMAGE */
+        if (blog.featuredImage?.public_id) {
+            const filePath = path.join(
+                __dirname,
+                "../../public/uploads/products/images/",
+                blog.featuredImage.public_id
+            );
+
+            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        }
+
+        /* DELETE GALLERY */
+        if (blog.gallery?.length) {
+            blog.gallery.forEach((img) => {
+                const filePath = path.join(
+                    __dirname,
+                    "../../public/uploads/products/images/",
+                    img.public_id
+                );
+
+                if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+            });
+        }
+
+        await Blog.findByIdAndDelete(req.params.id);
+
         res.status(200).json({
             success: true,
             message: "Blog deleted successfully",
         });
+
     } catch (error) {
+        console.error("DELETE BLOG ERROR:", error);
         res.status(500).json({
             success: false,
-            message: "Failed to delete blog",
-            error: error.message,
+            message: "Delete failed",
         });
     }
 };
-

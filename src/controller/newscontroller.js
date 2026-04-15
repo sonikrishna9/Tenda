@@ -1,8 +1,11 @@
 const News = require("../model/newsmodel.js");
-const cloudinary = require("../../config/cloudinary.js");
+const path = require("path");
+const fs = require("fs");
 const slugify = require("../utils/slugify.js");
 
+const BASE_URL = process.env.BASE_URL || "http://localhost:8080";
 
+/* ================= CREATE ================= */
 exports.createNews = async (req, res) => {
   try {
     const { title, description, publishedDate, location, category, author } =
@@ -21,35 +24,21 @@ exports.createNews = async (req, res) => {
     let images = [];
 
     /* ---------- BANNER IMAGE ---------- */
-
     if (req.files?.bannerImage?.length) {
       const file = req.files.bannerImage[0];
 
-      const upload = await cloudinary.uploader.upload(
-        `data:${file.mimetype};base64,${file.buffer.toString("base64")}`,
-        { folder: "news/banner" }
-      );
-
       bannerImage = {
-        url: upload.secure_url,
-        public_id: upload.public_id,
+        url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+        public_id: file.filename,
       };
     }
 
     /* ---------- MULTIPLE IMAGES ---------- */
-
     if (req.files?.images?.length) {
-      for (const file of req.files.images) {
-        const upload = await cloudinary.uploader.upload(
-          `data:${file.mimetype};base64,${file.buffer.toString("base64")}`,
-          { folder: "news/images" }
-        );
-
-        images.push({
-          url: upload.secure_url,
-          public_id: upload.public_id,
-        });
-      }
+      images = req.files.images.map((file) => ({
+        url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+        public_id: file.filename,
+      }));
     }
 
     const news = await News.create({
@@ -69,18 +58,17 @@ exports.createNews = async (req, res) => {
       message: "News created successfully",
       news,
     });
+
   } catch (error) {
     console.error("Create News Error:", error);
-
     res.status(500).json({
       success: false,
       message: "Failed to create news",
-      error: error.message,
     });
   }
 };
 
-
+/* ================= GET ALL ================= */
 exports.getAllNews = async (req, res) => {
   try {
     const { page = 1, limit = 10, search } = req.query;
@@ -105,15 +93,16 @@ exports.getAllNews = async (req, res) => {
       pages: Math.ceil(total / limit),
       data: news,
     });
+
   } catch (error) {
     res.status(500).json({
       success: false,
       message: "Failed to fetch news",
-      error: error.message,
     });
   }
 };
 
+/* ================= GET SINGLE ================= */
 exports.getNewsBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
@@ -131,15 +120,16 @@ exports.getNewsBySlug = async (req, res) => {
       success: true,
       data: news,
     });
+
   } catch (error) {
     res.status(500).json({
       success: false,
       message: "Failed to fetch news",
-      error: error.message,
     });
   }
 };
 
+/* ================= UPDATE ================= */
 exports.updateNews = async (req, res) => {
   try {
     const { id } = req.params;
@@ -154,8 +144,7 @@ exports.updateNews = async (req, res) => {
       });
     }
 
-    /* ---------- TEXT UPDATE ---------- */
-
+    /* TEXT UPDATE */
     if (req.body.title) {
       news.title = req.body.title;
       news.slug = slugify(req.body.title, {
@@ -170,13 +159,20 @@ exports.updateNews = async (req, res) => {
     if (req.body.author) news.author = req.body.author;
     if (req.body.publishedDate) news.publishedDate = req.body.publishedDate;
 
-    /* ---------- REMOVE IMAGES ---------- */
-
+    /* REMOVE IMAGES */
     if (removeImages) {
       const imagesToRemove = JSON.parse(removeImages);
 
       for (const public_id of imagesToRemove) {
-        await cloudinary.uploader.destroy(public_id);
+        const filePath = path.join(
+          __dirname,
+          "../../public/uploads/products/images/",
+          public_id
+        );
+
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
       }
 
       news.images = news.images.filter(
@@ -184,39 +180,35 @@ exports.updateNews = async (req, res) => {
       );
     }
 
-    /* ---------- ADD NEW IMAGES ---------- */
-
+    /* ADD NEW IMAGES */
     if (req.files?.images?.length) {
       for (const file of req.files.images) {
-        const upload = await cloudinary.uploader.upload(
-          `data:${file.mimetype};base64,${file.buffer.toString("base64")}`,
-          { folder: "news/images" }
-        );
-
         news.images.push({
-          url: upload.secure_url,
-          public_id: upload.public_id,
+          url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+          public_id: file.filename,
         });
       }
     }
 
-    /* ---------- UPDATE BANNER ---------- */
-
+    /* UPDATE BANNER */
     if (req.files?.bannerImage?.length) {
       if (news.bannerImage?.public_id) {
-        await cloudinary.uploader.destroy(news.bannerImage.public_id);
+        const oldPath = path.join(
+          __dirname,
+          "../../public/uploads/products/images/",
+          news.bannerImage.public_id
+        );
+
+        if (fs.existsSync(oldPath)) {
+          fs.unlinkSync(oldPath);
+        }
       }
 
       const file = req.files.bannerImage[0];
 
-      const upload = await cloudinary.uploader.upload(
-        `data:${file.mimetype};base64,${file.buffer.toString("base64")}`,
-        { folder: "news/banner" }
-      );
-
       news.bannerImage = {
-        url: upload.secure_url,
-        public_id: upload.public_id,
+        url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+        public_id: file.filename,
       };
     }
 
@@ -227,17 +219,18 @@ exports.updateNews = async (req, res) => {
       message: "News updated successfully",
       news,
     });
+
   } catch (error) {
     console.error("Update News Error:", error);
-
     res.status(500).json({
       success: false,
       message: "Failed to update news",
-      error: error.message,
     });
   }
 };
 
+
+/* ================= DELETE ================= */
 exports.deleteNews = async (req, res) => {
   try {
     const { id } = req.params;
@@ -251,35 +244,46 @@ exports.deleteNews = async (req, res) => {
       });
     }
 
-    /* ---------- DELETE BANNER ---------- */
-
+    /* DELETE BANNER */
     if (news.bannerImage?.public_id) {
-      await cloudinary.uploader.destroy(news.bannerImage.public_id);
+      const filePath = path.join(
+        __dirname,
+        "../../public/uploads/products/images/",
+        news.bannerImage.public_id
+      );
+
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
     }
 
-    /* ---------- DELETE IMAGES ---------- */
+    /* DELETE IMAGES */
+    for (const img of news.images) {
+      if (img.public_id) {
+        const filePath = path.join(
+          __dirname,
+          "../../public/uploads/products/images/",
+          img.public_id
+        );
 
-    if (news.images?.length) {
-      for (const img of news.images) {
-        if (img.public_id) {
-          await cloudinary.uploader.destroy(img.public_id);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
         }
       }
     }
 
-    await News.findByIdAndDelete(id);
+    await news.deleteOne();
 
     res.status(200).json({
       success: true,
       message: "News deleted successfully",
     });
+
   } catch (error) {
     console.error("Delete News Error:", error);
-
     res.status(500).json({
       success: false,
       message: "Failed to delete news",
-      error: error.message,
     });
   }
 };

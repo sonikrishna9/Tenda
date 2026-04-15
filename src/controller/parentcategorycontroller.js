@@ -1,10 +1,8 @@
 const ParentCategory = require("../model/parentcategorymodel.js");
-const uploadToCloudinary = require("../utils/cloudinaryUpload");
-const slugify = require("../utils/slugify.js");
-const cloudinary = require("../../config/cloudinary.js")
-// const deleteFromCloudinary = require("../utils/");
+const path = require("path");
+const fs = require("fs");
 
-
+/* ================= CREATE ================= */
 exports.createparentcategory = async (req, res) => {
     try {
         const { categoryname, subcategories } = req.body;
@@ -12,113 +10,89 @@ exports.createparentcategory = async (req, res) => {
         if (!categoryname) {
             return res.status(400).json({
                 success: false,
-                message: "Category name required"
+                message: "Category name required",
             });
         }
 
-        // ✅ Parse subcategories (string -> array)
+        // parse subcategories
         let parsedSub = [];
-
         if (subcategories) {
             try {
                 parsedSub = JSON.parse(subcategories);
-                parsedSub = [...new Set(parsedSub)].map(name => ({ name }));
+                parsedSub = [...new Set(parsedSub)].map((name) => ({ name }));
             } catch (e) {
                 return res.status(400).json({
                     success: false,
-                    message: "Invalid subcategories format"
+                    message: "Invalid subcategories format",
                 });
             }
         }
 
-        // IMAGE (same as yours)
+        // IMAGE
         const image = req.files?.images?.[0];
 
-        if (!image || !image.buffer) {
+        if (!image) {
             return res.status(400).json({
                 success: false,
-                message: "Image is required"
+                message: "Image is required",
             });
         }
 
-        const uploadimage = await uploadToCloudinary(
-            image.buffer,
-            `category/images/${slugify(categoryname)}`,
-            image.mimetype,
-            image.originalname
-        );
+        const BASE_URL = process.env.BASE_URL || "http://localhost:8080";
 
         const category = await ParentCategory.create({
             categoryname,
             subcategories: parsedSub,
             images: {
-                url: uploadimage.secure_url,
-                public_id: uploadimage.public_id
-            }
+                url: `${BASE_URL}/uploads/products/images/${image.filename}`,
+                public_id: image.filename, // local file name
+            },
         });
 
         res.status(201).json({
             success: true,
-            category
+            category,
         });
-
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 };
 
+/* ================= GET ================= */
 exports.getcategory = async (req, res) => {
     try {
-        const parentcategory = await ParentCategory.find()
-
-        if (!parentcategory) {
-            return res.status(404).json({
-                success: false,
-                message: "Parent Category not found"
-            })
-        }
+        const parentcategory = await ParentCategory.find();
 
         return res.status(200).json({
             success: true,
-            message: "Parent Category Fetched Successfully",
-            parentcategory
-        })
-    }
-    catch (error) {
+            parentcategory,
+        });
+    } catch (error) {
         return res.status(500).json({
-            success: true,
-            message: "Internal Server Error",
-            error: error.message
-        })
+            success: false,
+            error: error.message,
+        });
     }
-}
+};
 
+/* ================= FRONTEND ================= */
 exports.getfrontendcategory = async (req, res) => {
     try {
-        const parentcategory = await ParentCategory.find({ status: true })
-
-        if (!parentcategory) {
-            return res.status(404).json({
-                success: false,
-                message: "Parent Category not found"
-            })
-        }
+        const parentcategory = await ParentCategory.find({ status: true });
 
         return res.status(200).json({
             success: true,
-            message: "Parent Category Fetched Successfully",
-            parentcategory
-        })
-    }
-    catch (error) {
+            parentcategory,
+        });
+    } catch (error) {
         return res.status(500).json({
-            success: true,
-            message: "Internal Server Error",
-            error: error.message
-        })
+            success: false,
+            error: error.message,
+        });
     }
-}
+};
 
+/* ================= UPDATE ================= */
 exports.updatecategory = async (req, res) => {
     try {
         const category = await ParentCategory.findById(req.params.id);
@@ -126,7 +100,7 @@ exports.updatecategory = async (req, res) => {
         if (!category) {
             return res.status(404).json({
                 success: false,
-                message: "Category not found"
+                message: "Category not found",
             });
         }
 
@@ -140,48 +114,41 @@ exports.updatecategory = async (req, res) => {
             category.categoryname = categoryname.trim();
         }
 
-        // ✅ UPDATE SUBCATEGORIES
-        let parsedSub = [];
-
         if (subcategories) {
             try {
-                parsedSub = JSON.parse(subcategories);
-                parsedSub = [...new Set(parsedSub)].map(name => ({ name }));
+                let parsedSub = JSON.parse(subcategories);
+                parsedSub = [...new Set(parsedSub)].map((name) => ({ name }));
+                category.subcategories = parsedSub;
             } catch (e) {
                 return res.status(400).json({
                     success: false,
-                    message: "Invalid subcategories format"
+                    message: "Invalid subcategories format",
                 });
             }
         }
 
-        // IMAGE UPDATE (same as yours)
+        // IMAGE UPDATE
         const image = req.files?.images?.[0];
 
-
-
-        if (!image || !image.buffer) {
-            return res.status(400).json({
-                success: false,
-                message: "Image is required"
-            });
-        }
-
         if (image) {
+            // delete old file
             if (category.images?.public_id) {
-                await cloudinary.uploader.destroy(category.images.public_id);
+                const oldPath = path.join(
+                    __dirname,
+                    "../../public/uploads/products/images/",
+                    category.images.public_id
+                );
+
+                if (fs.existsSync(oldPath)) {
+                    fs.unlinkSync(oldPath);
+                }
             }
 
-            const uploadimage = await uploadToCloudinary(
-                image.buffer,
-                `category/images/${slugify(category.categoryname)}`,
-                image.mimetype,
-                image.originalname
-            );
+            const BASE_URL = process.env.BASE_URL || "http://localhost:8080";
 
             category.images = {
-                url: uploadimage.secure_url,
-                public_id: uploadimage.public_id
+                url: `${BASE_URL}/uploads/products/images/${image.filename}`,
+                public_id: image.filename,
             };
         }
 
@@ -189,19 +156,16 @@ exports.updatecategory = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            category
+            category,
         });
-
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
 };
 
+/* ================= DELETE ================= */
 exports.deletecategory = async (req, res) => {
     try {
-        /* ---------------------------------
-           1. FIND CATEGORY
-        ----------------------------------*/
         const category = await ParentCategory.findById(req.params.id);
 
         if (!category) {
@@ -211,30 +175,33 @@ exports.deletecategory = async (req, res) => {
             });
         }
 
-        /* ---------------------------------
-           2. DELETE IMAGE FROM CLOUDINARY
-        ----------------------------------*/
+        // delete local file
         if (category.images?.public_id) {
-            await cloudinary.uploader.destroy(category.images.public_id);
+            const filePath = path.join(
+                __dirname,
+                "../../public/uploads/products/images/",
+                category.images.public_id
+            );
+
+            console.log("DELETE PATH:", filePath); // 👈 debug
+
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+            }
         }
 
-        /* ---------------------------------
-           3. DELETE CATEGORY FROM DATABASE
-        ----------------------------------*/
         await ParentCategory.findByIdAndDelete(req.params.id);
 
         return res.status(200).json({
             success: true,
-            message: "Parent category deleted successfully",
+            message: "Category deleted successfully",
         });
-
     } catch (error) {
-        console.error("Delete Category Error:", error);
+        console.error("DELETE ERROR:", error); // 👈 IMPORTANT
 
         return res.status(500).json({
             success: false,
-            message: "Internal Server Error",
-            error: error.message,
+            message: error.message, // 👈 show real error
         });
     }
 };

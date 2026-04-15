@@ -10,6 +10,6 @@ router.post("/create", verifyAdminToken, uploadMixed, createparentcategory)
 router.get('/getall', verifyAdminToken, getcategory)
 
 router.put('/update/:id', verifyAdminToken, uploadMixed, updatecategory)
-router.delete('/:id', verifyAdminToken, uploadMixed, deletecategory)
+router.delete('/:id', verifyAdminToken, deletecategory)
 
 module.exports = router;

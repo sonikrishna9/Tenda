@@ -1,12 +1,12 @@
 const Company = require("../model/Company");
-const uploadToCloudinary = require("../utils/cloudinaryUpload");
-const cloudinary = require("../../config/cloudinary");
+const path = require("path");
+const fs = require("fs");
 
-/* ================= CREATE COMPANY ================= */
+const BASE_URL = process.env.BASE_URL || "http://localhost:8080";
 
+/* ================= CREATE ================= */
 exports.createCompany = async (req, res) => {
     try {
-
         const { companyName } = req.body;
 
         if (!companyName) {
@@ -25,19 +25,14 @@ exports.createCompany = async (req, res) => {
             });
         }
 
-        let logo = {};
+        let logo = null;
 
-        if (req.file) {
-            const uploaded = await uploadToCloudinary(
-                req.file.buffer,
-                "companies",
-                req.file.mimetype,
-                req.file.originalname
-            );
+        if (req.files?.logo?.[0]) {
+            const file = req.files.logo[0];
 
             logo = {
-                url: uploaded.secure_url,
-                public_id: uploaded.public_id,
+                url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+                public_id: file.filename,
             };
         }
 
@@ -53,22 +48,19 @@ exports.createCompany = async (req, res) => {
         });
 
     } catch (error) {
-
         console.error("CREATE COMPANY ERROR:", error);
 
         return res.status(500).json({
             success: false,
             message: "Internal Server Error",
         });
-
     }
 };
 
-/* ================= GET ALL COMPANIES ================= */
 
+/* ================= GET ALL ================= */
 exports.getAllCompanies = async (req, res) => {
     try {
-
         const companies = await Company.find();
 
         return res.status(200).json({
@@ -77,22 +69,19 @@ exports.getAllCompanies = async (req, res) => {
         });
 
     } catch (error) {
-
         console.error("GET COMPANIES ERROR:", error);
 
         return res.status(500).json({
             success: false,
             message: "Internal Server Error",
         });
-
     }
 };
 
-/* ================= GET SINGLE COMPANY ================= */
 
+/* ================= GET SINGLE ================= */
 exports.getCompany = async (req, res) => {
     try {
-
         const company = await Company.findById(req.params.id);
 
         if (!company) {
@@ -108,22 +97,19 @@ exports.getCompany = async (req, res) => {
         });
 
     } catch (error) {
-
         console.error("GET COMPANY ERROR:", error);
 
         return res.status(500).json({
             success: false,
             message: "Internal Server Error",
         });
-
     }
 };
 
-/* ================= UPDATE COMPANY ================= */
 
+/* ================= UPDATE ================= */
 exports.updateCompany = async (req, res) => {
     try {
-
         const company = await Company.findById(req.params.id);
 
         if (!company) {
@@ -135,36 +121,29 @@ exports.updateCompany = async (req, res) => {
 
         const { companyName, status } = req.body;
 
-        /* ---------- UPDATE NAME ---------- */
+        if (companyName) company.companyName = companyName;
+        if (status) company.status = status;
 
-        if (companyName) {
-            company.companyName = companyName;
-        }
+        /* 🔥 UPDATE LOGO */
+        if (req.files?.logo?.[0]) {
+            const file = req.files.logo[0];
 
-        if (status) {
-            company.status = status;
-        }
-
-        /* ---------- UPDATE LOGO ---------- */
-
-        if (req.file) {
-
-            // delete old logo from cloudinary
+            // delete old logo
             if (company.logo?.public_id) {
-                await cloudinary.uploader.destroy(company.logo.public_id);
+                const oldPath = path.join(
+                    __dirname,
+                    "../../public/uploads/products/images/",
+                    company.logo.public_id
+                );
+
+                if (fs.existsSync(oldPath)) {
+                    fs.unlinkSync(oldPath);
+                }
             }
 
-            // upload new logo
-            const uploaded = await uploadToCloudinary(
-                req.file.buffer,
-                "companies",
-                req.file.mimetype,
-                req.file.originalname
-            );
-
             company.logo = {
-                url: uploaded.secure_url,
-                public_id: uploaded.public_id,
+                url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+                public_id: file.filename,
             };
         }
 
@@ -177,23 +156,19 @@ exports.updateCompany = async (req, res) => {
         });
 
     } catch (error) {
-
         console.error("UPDATE COMPANY ERROR:", error);
 
         return res.status(500).json({
             success: false,
             message: "Internal Server Error",
-            error: error.message,
         });
-
     }
 };
 
-/* ================= DELETE COMPANY ================= */
 
+/* ================= DELETE ================= */
 exports.deleteCompany = async (req, res) => {
     try {
-
         const company = await Company.findById(req.params.id);
 
         if (!company) {
@@ -203,13 +178,18 @@ exports.deleteCompany = async (req, res) => {
             });
         }
 
-        /* ---------- DELETE LOGO FROM CLOUDINARY ---------- */
-
+        // 🔥 delete logo
         if (company.logo?.public_id) {
-            await cloudinary.uploader.destroy(company.logo.public_id);
-        }
+            const filePath = path.join(
+                __dirname,
+                "../../public/uploads/products/images/",
+                company.logo.public_id
+            );
 
-        /* ---------- DELETE COMPANY ---------- */
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+            }
+        }
 
         await company.deleteOne();
 
@@ -219,14 +199,11 @@ exports.deleteCompany = async (req, res) => {
         });
 
     } catch (error) {
-
         console.error("DELETE COMPANY ERROR:", error);
 
         return res.status(500).json({
             success: false,
             message: "Internal Server Error",
-            error: error.message,
         });
-
     }
 };

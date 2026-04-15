@@ -17,16 +17,12 @@ const productSchema = new mongoose.Schema(
         public_id: String,
       },
     ],
-
-    // ⭐ NEW: FEATURE PICTURES (MULTIPLE IMAGES)
     featurePictures: [
       {
         url: String,
         public_id: String,
       },
     ],
-
-    // ⭐ NEW: PARAMETERS FIELD
     parameters: [
       {
         title: String,
@@ -38,8 +34,6 @@ const productSchema = new mongoose.Schema(
         ],
       },
     ],
-
-    // 🛒 BUY LINKS
     buylink: [
       {
         companyname: String,
@@ -51,16 +45,12 @@ const productSchema = new mongoose.Schema(
         ],
       },
     ],
-
-    // 🎥 VIDEOS → SUPABASE
     videos: [
       {
         url: String,
         path: String,
       },
     ],
-
-    // 📄 PDFs → SUPABASE
     pdf: {
       quickstartpdfs: [
         {

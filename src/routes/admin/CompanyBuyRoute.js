@@ -1,28 +1,40 @@
 const express = require("express");
 const router = express.Router();
-const multer = require("multer");
 
 const {
-    createCompany,
-    getAllCompanies,
-    getCompany,
-    updateCompany,
-    deleteCompany,
+  createCompany,
+  getAllCompanies,
+  getCompany,
+  updateCompany,
+  deleteCompany,
 } = require("../../controller/companyController.js");
+
 const { verifyAdminToken } = require("../../middleware/verifyAdminToken.js");
+const { uploadMixed } = require("../../middleware/uploadMiddleware.js");
 
-const storage = multer.memoryStorage();
+/* ================= CREATE ================= */
+router.post(
+  "/create",
+  verifyAdminToken,
+  uploadMixed, // 🔥 IMPORTANT
+  createCompany
+);
 
-const upload = multer({ storage });
-
-router.post("/create", verifyAdminToken, upload.single("logo"), createCompany);
-
+/* ================= GET ALL ================= */
 router.get("/", verifyAdminToken, getAllCompanies);
 
+/* ================= GET SINGLE ================= */
 router.get("/:id", verifyAdminToken, getCompany);
 
-router.put("/update/:id", verifyAdminToken, upload.single("logo"), updateCompany);
+/* ================= UPDATE ================= */
+router.put(
+  "/update/:id",
+  verifyAdminToken,
+  uploadMixed, // 🔥 IMPORTANT
+  updateCompany
+);
 
+/* ================= DELETE ================= */
 router.delete("/delete/:id", verifyAdminToken, deleteCompany);
 
 module.exports = router;

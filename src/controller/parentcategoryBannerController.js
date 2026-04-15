@@ -1,211 +1,212 @@
 const ParentCatgoryBanner = require("../model/parentcateogryBanner.js");
-const cloudinary = require("cloudinary").v2;
-const uploadBuffer = require("../utils/cloudinaryUpload.js");
-const deleteFromCloudinary = require("../utils/cloudinaryDelete.js");
+const path = require("path");
+const fs = require("fs");
 
-
-// SAME SLUGIFY AS FRONTEND
+/* ================= SLUGIFY ================= */
 const slugify = (s = "") =>
-    s
-        .toString()
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, "-")
-        .replace(/[^\w-]+/g, "")
-        .replace(/--+/g, "-");
+  s
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^\w-]+/g, "")
+    .replace(/--+/g, "-");
 
+const BASE_URL = process.env.BASE_URL || "http://localhost:8080";
 
-/* ================= GET BANNER BY SLUG ================= */
+/* ================= GET ================= */
 exports.getParentCatgoryBanner = async (req, res) => {
-    try {
-        const { parentCategory } = req.params;
+  try {
+    const { parentCategory } = req.params;
 
-        const parentSlug = slugify(parentCategory);
+    const banner = await ParentCatgoryBanner.findOne({
+      slugParent: slugify(parentCategory),
+      isActive: true,
+    });
 
-        const banner = await ParentCatgoryBanner.findOne({
-            slugParent: parentSlug,
-            isActive: true
-        });
-
-        if (!banner) {
-            return res.status(404).json({
-                success: false,
-                message: "Banner not found"
-            });
-        }
-
-        return res.status(200).json({
-            success: true,
-            banner
-        });
-
-    } catch (error) {
-        console.error("❌ getParentCatgoryBanner error:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Server error"
-        });
+    if (!banner) {
+      return res.status(404).json({
+        success: false,
+        message: "Banner not found",
+      });
     }
+
+    res.json({ success: true, banner });
+
+  } catch (error) {
+    console.error("GET ERROR:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
 };
 
-
+/* ================= CREATE ================= */
 exports.createParentCatgoryBanner = async (req, res) => {
-    try {
-        const { title, subtitle, parentCategory, description } = req.body;
+  try {
+    const { title, subtitle, parentCategory, description } = req.body;
 
-        if (!parentCategory) {
-            return res.status(400).json({
-                success: false,
-                message: "Parent category required"
-            });
-        }
-
-        if (!req.files?.bannerImage?.[0]) {
-            return res.status(400).json({
-                success: false,
-                message: "Banner image required"
-            });
-        }
-
-        const slugParent = slugify(parentCategory);
-
-        const existing = await ParentCatgoryBanner.findOne({ slugParent });
-
-        if (existing) {
-            return res.status(400).json({
-                success: false,
-                message: "Banner already exists for this parent category"
-            });
-        }
-
-        const file = req.files.bannerImage[0];
-        const uploaded = await uploadBuffer(file.buffer, "ParentCatgoryBanner");
-
-        const banner = await ParentCatgoryBanner.create({
-            title,
-            subtitle,
-            parentCategory,
-            slugParent,
-            description,
-            bannerImage: {
-                url: uploaded.secure_url,
-                public_id: uploaded.public_id
-            }
-        });
-
-        res.status(201).json({
-            success: true,
-            message: "Banner created",
-            banner
-        });
-
-    } catch (error) {
-        console.error("❌ createParentCatgoryBanner:", error);
-        res.status(500).json({ success: false, message: "Server error" });
+    if (!req.files?.bannerImage?.[0]) {
+      return res.status(400).json({
+        success: false,
+        message: "Banner image required",
+      });
     }
+
+    const slugParent = slugify(parentCategory);
+
+    const existing = await ParentCatgoryBanner.findOne({ slugParent });
+
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: "Banner already exists",
+      });
+    }
+
+    const file = req.files.bannerImage[0];
+
+    const banner = await ParentCatgoryBanner.create({
+      title,
+      subtitle,
+      parentCategory,
+      slugParent,
+      description,
+      bannerImage: {
+        url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+        public_id: file.filename,
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Banner created",
+      banner,
+    });
+
+  } catch (error) {
+    console.error("CREATE ERROR:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
 };
 
 
+/* ================= GET ALL ================= */
 exports.getAllParentCatgoryBanners = async (req, res) => {
-    try {
-        const banners = await ParentCatgoryBanner.find().sort({ sortOrder: 1, createdAt: -1 });
+  try {
+    const banners = await ParentCatgoryBanner.find().sort({
+      createdAt: -1,
+    });
 
-        res.status(200).json({
-            success: true,
-            count: banners.length,
-            banners
-        });
+    res.json({
+      success: true,
+      banners,
+    });
 
-    } catch (error) {
-        console.error("❌ getAllParentCatgoryBanners:", error);
-        res.status(500).json({ success: false, message: "Server error" });
-    }
+  } catch (error) {
+    console.error("GET ALL ERROR:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
 };
 
 
+/* ================= UPDATE ================= */
 exports.updateParentCatgoryBanner = async (req, res) => {
-    try {
-        const { id } = req.params;
+  try {
+    const banner = await ParentCatgoryBanner.findById(req.params.id);
 
-        const banner = await ParentCatgoryBanner.findById(id);
-        if (!banner) {
-            return res.status(404).json({ success: false, message: "Banner not found" });
-        }
+    if (!banner) {
+      return res.status(404).json({
+        success: false,
+        message: "Banner not found",
+      });
+    }
 
-        let updatedImage = banner.bannerImage;
+    let updatedImage = banner.bannerImage;
 
-        // 🔥 If new image uploaded → delete old first
-        if (req.files?.bannerImage?.[0]) {
+    /* 🔥 NEW IMAGE */
+    if (req.files?.bannerImage?.[0]) {
+      const file = req.files.bannerImage[0];
 
-            if (banner.bannerImage?.public_id) {
-                await deleteFromCloudinary(banner.bannerImage.public_id);
-            }
-
-            const file = req.files.bannerImage[0];
-            const uploaded = await uploadBuffer(file.buffer, "ParentCatgoryBanner");
-
-            updatedImage = {
-                url: uploaded.secure_url,
-                public_id: uploaded.public_id
-            };
-        }
-
-        const updatedParentCategory = req.body.parentCategory ?? banner.parentCategory;
-        const updatedSlug = slugify(updatedParentCategory);
-
-        const updated = await ParentCatgoryBanner.findByIdAndUpdate(
-            id,
-            {
-                title: req.body.title ?? banner.title,
-                subtitle: req.body.subtitle ?? banner.subtitle,
-                parentCategory: updatedParentCategory,
-                slugParent: updatedSlug,
-                description: req.body.description ?? banner.description,
-                bannerImage: updatedImage
-            },
-            { new: true }
+      // delete old image
+      if (banner.bannerImage?.public_id) {
+        const oldPath = path.join(
+          __dirname,
+          "../../public/uploads/products/images/",
+          banner.bannerImage.public_id
         );
 
-        res.json({
-            success: true,
-            message: "Banner updated",
-            banner: updated
-        });
+        if (fs.existsSync(oldPath)) {
+          fs.unlinkSync(oldPath);
+        }
+      }
 
-    } catch (error) {
-        console.error("❌ updateParentCatgoryBanner:", error);
-        res.status(500).json({ success: false, message: "Server error" });
+      updatedImage = {
+        url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+        public_id: file.filename,
+      };
     }
+
+    const updatedParentCategory = req.body.parentCategory ?? banner.parentCategory;
+    const updatedSlug = slugify(updatedParentCategory);
+
+    const updated = await ParentCatgoryBanner.findByIdAndUpdate(
+      req.params.id,
+      {
+        title: req.body.title ?? banner.title,
+        subtitle: req.body.subtitle ?? banner.subtitle,
+        parentCategory: updatedParentCategory,
+        slugParent: updatedSlug,
+        description: req.body.description ?? banner.description,
+        bannerImage: updatedImage,
+      },
+      { new: true }
+    );
+
+    res.json({
+      success: true,
+      message: "Banner updated",
+      banner: updated,
+    });
+
+  } catch (error) {
+    console.error("UPDATE ERROR:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
 };
 
-
+/* ================= DELETE ================= */
 exports.deleteParentCatgoryBanner = async (req, res) => {
-    try {
-        const { id } = req.params;
+  try {
+    const banner = await ParentCatgoryBanner.findById(req.params.id);
 
-        const banner = await ParentCatgoryBanner.findById(id);
-
-        if (!banner) {
-            return res.status(404).json({
-                success: false,
-                message: "Banner not found"
-            });
-        }
-
-        // 🔥 DELETE CLOUDINARY IMAGE FIRST
-        if (banner.bannerImage?.public_id) {
-            await deleteFromCloudinary(banner.bannerImage.public_id);
-        }
-
-        await banner.deleteOne();
-
-        res.json({
-            success: true,
-            message: "Banner deleted successfully"
-        });
-
-    } catch (error) {
-        console.error("❌ deleteParentCatgoryBanner:", error);
-        res.status(500).json({ success: false, message: "Server error" });
+    if (!banner) {
+      return res.status(404).json({
+        success: false,
+        message: "Banner not found",
+      });
     }
+
+    // 🔥 delete local image
+    if (banner.bannerImage?.public_id) {
+      const filePath = path.join(
+        __dirname,
+        "../../public/uploads/products/images/",
+        banner.bannerImage.public_id
+      );
+
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+
+    await banner.deleteOne();
+
+    res.json({
+      success: true,
+      message: "Banner deleted successfully",
+    });
+
+  } catch (error) {
+    console.error("DELETE ERROR:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
 };

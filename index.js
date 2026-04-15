@@ -2,6 +2,8 @@ const express = require("express");
 const dotenv = require("dotenv");
 const Dbconnect = require("./config/Dbconnect.js");
 const cors = require("cors");
+const path = require("path");
+
 
 dotenv.config();
 Dbconnect();
@@ -15,9 +17,9 @@ app.set("trust proxy", 1);
 app.use(
   cors({
     origin: [
-      "http://localhost:5173", 
-      "http://localhost:5174", 
-      "http://localhost:3000", 
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "http://localhost:3000",
       "https://tenda-frontend-pa94.vercel.app",
       "https://tenda-frontend.vercel.app",
     ],
@@ -26,8 +28,20 @@ app.use(
   })
 );
 
-app.use(express.json({ strict: false }));
-app.use(express.urlencoded({ extended: true }));
+
+
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+
+
+app.use(
+  "/uploads",
+  express.static(path.join(__dirname, "./public/uploads"), {
+    maxAge: "7d", // cache 7 days
+  })
+);
+
 
 /* Admin Routes */
 
@@ -35,13 +49,14 @@ app.use("/api/admin", require("./src/routes/adminAuthRoutes.js"));
 app.use("/api/admin/product", require("./src/routes/admin/AdminProductRoute.js"));
 app.use("/api/admin/parentcategory", require("./src/routes/admin/ParentcategoryRoute.js"));
 app.use("/api/admin/blog", require("./src/routes/admin/BlogRoute.js"));
-app.use("/api/admin/slider", require("./src/routes/admin/SliderRoutes.js")); 
-app.use("/api/admin/subcategory", require("./src/routes/admin/SubcategoryBannerRoute.js"));  
-app.use("/api/admin/parentcategorybanner", require("./src/routes/admin/ParentCategoryBannerRoute.js"));  
+app.use("/api/admin/slider", require("./src/routes/admin/SliderRoutes.js"));
+app.use("/api/admin/subcategory", require("./src/routes/admin/SubcategoryBannerRoute.js"));
+app.use("/api/admin/parentcategorybanner", require("./src/routes/admin/ParentCategoryBannerRoute.js"));
 app.use("/api/admin/gallery", require("./src/routes/admin/GalleryRoutes.js"));
 app.use("/api/admin/news", require("./src/routes/admin/NewsRoute.js"));
-app.use("/api/admin/company", require("./src/routes/admin/CompanyBuyRoute.js"));  
-app.use("/api/admin/videos", require("./src/routes/admin/VideoRoute.js")); 
+app.use("/api/admin/company", require("./src/routes/admin/CompanyBuyRoute.js"));
+app.use("/api/admin/videos", require("./src/routes/admin/VideoRoute.js"));
+app.use("/api/admin/meta", require("./src/routes/admin/seo.routes.js"));
 
 /* Frontend Routes */
 
@@ -51,16 +66,42 @@ app.use("/api/blog", require("./src/routes/blogroute.js"));
 app.use("/api/gallery", require("./src/routes/galleryRoutes.js"));
 app.use("/api/news", require("./src/routes/newsRoutes.js"));
 
-app.use("/api/slider", require("./src/routes/common/sliderRoutes.js")); 
+app.use("/api/slider", require("./src/routes/common/sliderRoutes.js"));
 
-app.use("/api/subcategory", require("./src/routes/subcategoryBannerRoutes.js"));  
-app.use("/api/parentcategorybanner", require("./src/routes/parentcateogryBannerRoutes.js"));  
-app.use("/api/company", require("./src/routes/companyRoutes.js")); 
-app.use("/api/videos", require("./src/routes/VideoRoute.js")); 
+app.use("/api/subcategory", require("./src/routes/subcategoryBannerRoutes.js"));
+app.use("/api/parentcategorybanner", require("./src/routes/parentcateogryBannerRoutes.js"));
+app.use("/api/company", require("./src/routes/companyRoutes.js"));
+app.use("/api/videos", require("./src/routes/VideoRoute.js"));
+app.use("/api/meta", require("./src/routes/seo.meta.js"));
 
 
 const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+});
+
+
+app.use((err, req, res, next) => {
+  console.error("GLOBAL ERROR:", err.message);
+
+  if (err.message === "Invalid file type") {
+    return res.status(400).json({
+      success: false,
+      message: "Only images, videos, and PDFs are allowed",
+    });
+  }
+
+  // multer file size error
+  if (err.code === "LIMIT_FILE_SIZE") {
+    return res.status(400).json({
+      success: false,
+      message: "File size too large (Max 50MB)",
+    });
+  }
+
+  return res.status(500).json({
+    success: false,
+    message: "Something went wrong",
+  });
 });
