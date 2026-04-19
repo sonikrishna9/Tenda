@@ -1,6 +1,7 @@
 const ParentCatgoryBanner = require("../model/parentcateogryBanner.js");
 const path = require("path");
 const fs = require("fs");
+const { buildUploadUrl } = require("../utils/uploadUrl");
 
 /* ================= SLUGIFY ================= */
 const slugify = (s = "") =>
@@ -11,8 +12,6 @@ const slugify = (s = "") =>
     .replace(/\s+/g, "-")
     .replace(/[^\w-]+/g, "")
     .replace(/--+/g, "-");
-
-const BASE_URL = process.env.BASE_URL || "http://localhost:8080";
 
 /* ================= GET ================= */
 exports.getParentCatgoryBanner = async (req, res) => {
@@ -71,7 +70,7 @@ exports.createParentCatgoryBanner = async (req, res) => {
       slugParent,
       description,
       bannerImage: {
-        url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+        url: buildUploadUrl("products", "images", file.filename),
         public_id: file.filename,
       },
     });
@@ -140,7 +139,7 @@ exports.updateParentCatgoryBanner = async (req, res) => {
       }
 
       updatedImage = {
-        url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+        url: buildUploadUrl("products", "images", file.filename),
         public_id: file.filename,
       };
     }

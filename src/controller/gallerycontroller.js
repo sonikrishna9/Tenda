@@ -2,8 +2,7 @@ const Gallery = require("../model/gallerymodel");
 const path = require("path");
 const fs = require("fs");
 const slugify = require("../utils/slugify");
-
-const BASE_URL = process.env.BASE_URL || "http://localhost:8080";
+const { buildUploadUrl } = require("../utils/uploadUrl");
 
 /* ================= CREATE ================= */
 exports.createGallery = async (req, res) => {
@@ -27,7 +26,7 @@ exports.createGallery = async (req, res) => {
     const slug = slugify(title, { lower: true, strict: true });
 
     const images = req.files.images.map((file) => ({
-      url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+      url: buildUploadUrl("products", "images", file.filename),
       public_id: file.filename,
     }));
 
@@ -170,7 +169,7 @@ exports.updateGallery = async (req, res) => {
     if (req.files?.images?.length) {
       for (const file of req.files.images) {
         gallery.images.push({
-          url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+          url: buildUploadUrl("products", "images", file.filename),
           public_id: file.filename,
         });
       }

@@ -1,8 +1,48 @@
 const Slider = require("../model/SliderModel.js");
 const path = require("path");
 const fs = require("fs");
+const { buildUploadUrl } = require("../utils/uploadUrl");
 
-const BASE_URL = process.env.BASE_URL || "http://localhost:8080";
+const getImageFilePath = (publicId) =>
+  path.join(__dirname, "../../public/uploads/products/images/", publicId);
+
+const deleteLocalImage = (publicId) => {
+  if (!publicId) return;
+
+  const filePath = getImageFilePath(publicId);
+
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+};
+
+const sortImagesByOrder = (images = []) =>
+  [...images].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+const serializeSlider = (slider) => {
+  const data = slider?.toObject ? slider.toObject() : slider;
+
+  return {
+    ...data,
+    images: sortImagesByOrder(data?.images || []),
+  };
+};
+
+const parseJsonArray = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  return [];
+};
 
 /* ---------------- GET SLIDER ---------------- */
 exports.getSliderBySlug = async (req, res) => {
@@ -20,9 +60,8 @@ exports.getSliderBySlug = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: slider,
+      data: serializeSlider(slider),
     });
-
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -53,7 +92,7 @@ exports.uploadSliderImages = async (req, res) => {
 
     for (const file of req.files.images) {
       slider.images.push({
-        url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+        url: buildUploadUrl("products", "images", file.filename),
         public_id: file.filename,
         alt: "",
         order: order++,
@@ -65,9 +104,8 @@ exports.uploadSliderImages = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Slider images uploaded",
-      data: slider,
+      data: serializeSlider(slider),
     });
-
   } catch (error) {
     console.error("UPLOAD SLIDER ERROR:", error);
     res.status(500).json({
@@ -91,19 +129,8 @@ exports.deleteSliderBySlug = async (req, res) => {
       });
     }
 
-    // 🔥 delete all images locally
     for (const image of slider.images) {
-      if (image.public_id) {
-        const filePath = path.join(
-          __dirname,
-          "../../public/uploads/products/images/",
-          image.public_id
-        );
-
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
-      }
+      deleteLocalImage(image.public_id);
     }
 
     await Slider.deleteOne({ slug });
@@ -112,7 +139,6 @@ exports.deleteSliderBySlug = async (req, res) => {
       success: true,
       message: `Slider '${slug}' deleted successfully`,
     });
-
   } catch (error) {
     console.error("DELETE SLIDER ERROR:", error);
     res.status(500).json({
@@ -127,13 +153,6 @@ exports.updateSliderImages = async (req, res) => {
   try {
     const { slug } = req.params;
 
-    if (!req.files || !req.files.images) {
-      return res.status(400).json({
-        success: false,
-        message: "No new images uploaded",
-      });
-    }
-
     const slider = await Slider.findOne({ slug });
 
     if (!slider) {
@@ -143,44 +162,88 @@ exports.updateSliderImages = async (req, res) => {
       });
     }
 
-    /* 🔥 STEP 1: delete old images */
-    for (const image of slider.images) {
-      if (image.public_id) {
-        const filePath = path.join(
-          __dirname,
-          "../../public/uploads/products/images/",
-          image.public_id
-        );
+    const uploadedFiles = req.files?.images || [];
+    const hasExplicitImageOrder = typeof req.body.imageOrder !== "undefined";
+    const imageOrder = parseJsonArray(req.body.imageOrder);
+    const newImageIds = Array.isArray(req.body.newImageIds)
+      ? req.body.newImageIds
+      : req.body.newImageIds
+        ? [req.body.newImageIds]
+        : [];
 
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
-      }
-    }
+    const existingImages = sortImagesByOrder(slider.images || []);
+    const existingImageMap = new Map(
+      existingImages.map((image) => [`existing:${image.public_id}`, image])
+    );
 
-    /* 🔥 STEP 2: clear DB */
-    slider.images = [];
+    const uploadedImageMap = new Map();
+    uploadedFiles.forEach((file, index) => {
+      const token = `new:${newImageIds[index] || `upload-${index}`}`;
 
-    /* 🔥 STEP 3: add new images */
-    let order = 0;
-
-    for (const file of req.files.images) {
-      slider.images.push({
-        url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+      uploadedImageMap.set(token, {
+        url: buildUploadUrl("products", "images", file.filename),
         public_id: file.filename,
         alt: "",
-        order: order++,
       });
-    }
+    });
 
+    const normalizedOrder = hasExplicitImageOrder
+      ? imageOrder
+      : [
+          ...existingImages.map((image) => `existing:${image.public_id}`),
+          ...[...uploadedImageMap.keys()],
+        ];
+
+    const nextImages = [];
+    const keptExistingIds = new Set();
+    const usedUploadTokens = new Set();
+
+    normalizedOrder.forEach((token) => {
+      if (existingImageMap.has(token)) {
+        const existingImage = existingImageMap.get(token);
+
+        keptExistingIds.add(existingImage.public_id);
+        nextImages.push({
+          ...(existingImage.toObject?.() ?? existingImage),
+          order: nextImages.length,
+        });
+        return;
+      }
+
+      if (uploadedImageMap.has(token)) {
+        const uploadedImage = uploadedImageMap.get(token);
+
+        usedUploadTokens.add(token);
+        nextImages.push({
+          ...uploadedImage,
+          order: nextImages.length,
+        });
+      }
+    });
+
+    existingImages.forEach((image) => {
+      if (!keptExistingIds.has(image.public_id)) {
+        deleteLocalImage(image.public_id);
+      }
+    });
+
+    [...uploadedImageMap.entries()].forEach(([token, image]) => {
+      if (!usedUploadTokens.has(token)) {
+        nextImages.push({
+          ...image,
+          order: nextImages.length,
+        });
+      }
+    });
+
+    slider.images = nextImages;
     await slider.save();
 
     res.status(200).json({
       success: true,
       message: "Slider updated successfully",
-      data: slider,
+      data: serializeSlider(slider),
     });
-
   } catch (error) {
     console.error("UPDATE SLIDER ERROR:", error);
     res.status(500).json({
@@ -198,9 +261,8 @@ exports.getAllSliders = async (req, res) => {
     res.status(200).json({
       success: true,
       count: sliders.length,
-      data: sliders,
+      data: sliders.map(serializeSlider),
     });
-
   } catch (error) {
     console.error("GET ALL SLIDER ERROR:", error);
     res.status(500).json({

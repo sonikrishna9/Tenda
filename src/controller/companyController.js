@@ -1,8 +1,7 @@
 const Company = require("../model/Company");
 const path = require("path");
 const fs = require("fs");
-
-const BASE_URL = process.env.BASE_URL || "http://localhost:8080";
+const { buildUploadUrl } = require("../utils/uploadUrl");
 
 /* ================= CREATE ================= */
 exports.createCompany = async (req, res) => {
@@ -31,7 +30,7 @@ exports.createCompany = async (req, res) => {
             const file = req.files.logo[0];
 
             logo = {
-                url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+                url: buildUploadUrl("products", "images", file.filename),
                 public_id: file.filename,
             };
         }
@@ -142,7 +141,7 @@ exports.updateCompany = async (req, res) => {
             }
 
             company.logo = {
-                url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+                url: buildUploadUrl("products", "images", file.filename),
                 public_id: file.filename,
             };
         }

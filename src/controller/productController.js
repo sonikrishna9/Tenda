@@ -3,10 +3,9 @@ const slugify = require("../utils/slugify");
 const path = require("path");
 const fs = require("fs");
 const processImage = require("../utils/imageProcessor");
+const { buildUploadUrl } = require("../utils/uploadUrl");
 
 /* ===================== CONFIG ===================== */
-
-const BASE_URL = process.env.BASE_URL || "http://localhost:8080";
 
 /* ===================== HELPERS ===================== */
 
@@ -26,10 +25,33 @@ const normalizePdf = (pdf = {}) => ({
   downloadpdfs: Array.isArray(pdf.downloadpdfs) ? pdf.downloadpdfs : [],
 });
 
+const getFileNameFromUrl = (url = "") => {
+  if (typeof url !== "string" || !url) return "";
+
+  const cleanUrl = url.split("?")[0].split("#")[0];
+  return decodeURIComponent(cleanUrl.split("/").pop() || "");
+};
+
+const getStoredFileKey = (item = {}) =>
+  item?.path || item?.public_id || getFileNameFromUrl(item?.url);
+
+const removeFilesFromCollection = (items = [], folder, ids = []) =>
+  items.filter((item) => {
+    const fileKey = getStoredFileKey(item);
+
+    if (fileKey && ids.includes(fileKey)) {
+      deleteFile(fileKey, folder);
+      return false;
+    }
+
+    return true;
+  });
+
 /* ✅ FILE MAP */
 const mapFiles = (files, folder) =>
   files.map((file) => ({
-    url: `${BASE_URL}/uploads/products/${folder}/${file.filename}`,
+    url: buildUploadUrl("products", folder, file.filename),
+    public_id: file.filename,
     path: file.filename,
   }));
 
@@ -120,17 +142,21 @@ exports.deleteProduct = async (req, res) => {
     if (!product)
       return res.status(404).json({ success: false, message: "Not found" });
 
-    product.images.forEach((img) => deleteFile(img.path, "images"));
-    product.featurePictures.forEach((img) =>
-      deleteFile(img.path, "feature-pictures")
+    product.images.forEach((img) =>
+      deleteFile(getStoredFileKey(img), "images")
     );
-    product.videos.forEach((v) => deleteFile(v.path, "videos"));
+    product.featurePictures.forEach((img) =>
+      deleteFile(getStoredFileKey(img), "feature-pictures")
+    );
+    product.videos.forEach((v) =>
+      deleteFile(getStoredFileKey(v), "videos")
+    );
 
     product.pdf?.quickstartpdfs?.forEach((p) =>
-      deleteFile(p.path, "pdfs")
+      deleteFile(getStoredFileKey(p), "pdfs")
     );
     product.pdf?.downloadpdfs?.forEach((p) =>
-      deleteFile(p.path, "pdfs")
+      deleteFile(getStoredFileKey(p), "pdfs")
     );
 
     await product.deleteOne();
@@ -170,6 +196,8 @@ exports.updateProduct = async (req, res) => {
       removeImages,
       removeFeaturePictures,
       removeVideos,
+      removeQuickstartPdfs,
+      removeDownloadPdfs,
     } = req.body;
 
     const slug = slugify(title || product.title, {
@@ -205,35 +233,39 @@ exports.updateProduct = async (req, res) => {
 
     if (removeImages) {
       const ids = safeParse(removeImages, []);
-      product.images = product.images.filter((img) => {
-        if (ids.includes(img.path)) {
-          deleteFile(img.path, "images");
-          return false;
-        }
-        return true;
-      });
+      product.images = removeFilesFromCollection(product.images, "images", ids);
     }
 
     if (removeFeaturePictures) {
       const ids = safeParse(removeFeaturePictures, []);
-      product.featurePictures = product.featurePictures.filter((img) => {
-        if (ids.includes(img.path)) {
-          deleteFile(img.path, "feature-pictures");
-          return false;
-        }
-        return true;
-      });
+      product.featurePictures = removeFilesFromCollection(
+        product.featurePictures,
+        "feature-pictures",
+        ids
+      );
     }
 
     if (removeVideos) {
       const ids = safeParse(removeVideos, []);
-      product.videos = product.videos.filter((v) => {
-        if (ids.includes(v.path)) {
-          deleteFile(v.path, "videos");
-          return false;
-        }
-        return true;
-      });
+      product.videos = removeFilesFromCollection(product.videos, "videos", ids);
+    }
+
+    if (removeQuickstartPdfs) {
+      const ids = safeParse(removeQuickstartPdfs, []);
+      product.pdf.quickstartpdfs = removeFilesFromCollection(
+        product.pdf.quickstartpdfs,
+        "pdfs",
+        ids
+      );
+    }
+
+    if (removeDownloadPdfs) {
+      const ids = safeParse(removeDownloadPdfs, []);
+      product.pdf.downloadpdfs = removeFilesFromCollection(
+        product.pdf.downloadpdfs,
+        "pdfs",
+        ids
+      );
     }
 
     /* ADD FILES */
@@ -302,8 +334,75 @@ exports.getProduct = async (req, res) => {
 };
 
 exports.getallProducts = async (req, res) => {
-  const allproducts = await Product.find();
-  res.json({ success: true, allproducts });
+  try {
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = Math.max(Number(req.query.limit) || 10, 1);
+    const skip = (page - 1) * limit;
+    const search = (req.query.search || "").trim();
+    const status = (req.query.status || "all").trim();
+    const category = (req.query.category || "all").trim();
+
+    const query = {};
+    const andFilters = [];
+
+    if (search) {
+      andFilters.push({
+        $or: [
+          { title: { $regex: search, $options: "i" } },
+          { subtitle: { $regex: search, $options: "i" } },
+          { parentCategory: { $regex: search, $options: "i" } },
+          { subCategory: { $regex: search, $options: "i" } },
+        ],
+      });
+    }
+
+    if (status !== "all") {
+      andFilters.push({ status });
+    }
+
+    if (category !== "all") {
+      andFilters.push({ parentCategory: category });
+    }
+
+    if (andFilters.length === 1) {
+      Object.assign(query, andFilters[0]);
+    } else if (andFilters.length > 1) {
+      query.$and = andFilters;
+    }
+
+    const [allproducts, total, categories, totalProducts, activeProducts] =
+      await Promise.all([
+        Product.find(query).sort({ updatedAt: -1, createdAt: -1 }).skip(skip).limit(limit),
+        Product.countDocuments(query),
+        Product.distinct("parentCategory"),
+        Product.countDocuments(),
+        Product.countDocuments({ status: "active" }),
+      ]);
+
+    return res.json({
+      success: true,
+      allproducts,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+      filters: {
+        categories: categories.filter(Boolean).sort(),
+      },
+      summary: {
+        totalProducts,
+        activeProducts,
+      },
+    });
+  } catch (error) {
+    console.error("GET ALL PRODUCTS ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch products",
+    });
+  }
 };
 
 exports.getallfrontendparentcategory = async (req, res) => {

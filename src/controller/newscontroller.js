@@ -2,8 +2,7 @@ const News = require("../model/newsmodel.js");
 const path = require("path");
 const fs = require("fs");
 const slugify = require("../utils/slugify.js");
-
-const BASE_URL = process.env.BASE_URL || "http://localhost:8080";
+const { buildUploadUrl } = require("../utils/uploadUrl");
 
 /* ================= CREATE ================= */
 exports.createNews = async (req, res) => {
@@ -28,7 +27,7 @@ exports.createNews = async (req, res) => {
       const file = req.files.bannerImage[0];
 
       bannerImage = {
-        url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+        url: buildUploadUrl("products", "images", file.filename),
         public_id: file.filename,
       };
     }
@@ -36,7 +35,7 @@ exports.createNews = async (req, res) => {
     /* ---------- MULTIPLE IMAGES ---------- */
     if (req.files?.images?.length) {
       images = req.files.images.map((file) => ({
-        url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+        url: buildUploadUrl("products", "images", file.filename),
         public_id: file.filename,
       }));
     }
@@ -184,7 +183,7 @@ exports.updateNews = async (req, res) => {
     if (req.files?.images?.length) {
       for (const file of req.files.images) {
         news.images.push({
-          url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+          url: buildUploadUrl("products", "images", file.filename),
           public_id: file.filename,
         });
       }
@@ -207,7 +206,7 @@ exports.updateNews = async (req, res) => {
       const file = req.files.bannerImage[0];
 
       news.bannerImage = {
-        url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+        url: buildUploadUrl("products", "images", file.filename),
         public_id: file.filename,
       };
     }

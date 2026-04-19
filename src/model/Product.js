@@ -15,12 +15,14 @@ const productSchema = new mongoose.Schema(
       {
         url: String,
         public_id: String,
+        path: String,
       },
     ],
     featurePictures: [
       {
         url: String,
         public_id: String,
+        path: String,
       },
     ],
     parameters: [
@@ -48,6 +50,7 @@ const productSchema = new mongoose.Schema(
     videos: [
       {
         url: String,
+        public_id: String,
         path: String,
       },
     ],
@@ -55,12 +58,14 @@ const productSchema = new mongoose.Schema(
       quickstartpdfs: [
         {
           url: String,
+          public_id: String,
           path: String,
         },
       ],
       downloadpdfs: [
         {
           url: String,
+          public_id: String,
           path: String,
         },
       ],

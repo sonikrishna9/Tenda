@@ -1,6 +1,7 @@
 const ParentCategory = require("../model/parentcategorymodel.js");
 const path = require("path");
 const fs = require("fs");
+const { buildUploadUrl } = require("../utils/uploadUrl");
 
 /* ================= CREATE ================= */
 exports.createparentcategory = async (req, res) => {
@@ -38,13 +39,11 @@ exports.createparentcategory = async (req, res) => {
             });
         }
 
-        const BASE_URL = process.env.BASE_URL || "http://localhost:8080";
-
         const category = await ParentCategory.create({
             categoryname,
             subcategories: parsedSub,
             images: {
-                url: `${BASE_URL}/uploads/products/images/${image.filename}`,
+                url: buildUploadUrl("products", "images", image.filename),
                 public_id: image.filename, // local file name
             },
         });
@@ -144,10 +143,8 @@ exports.updatecategory = async (req, res) => {
                 }
             }
 
-            const BASE_URL = process.env.BASE_URL || "http://localhost:8080";
-
             category.images = {
-                url: `${BASE_URL}/uploads/products/images/${image.filename}`,
+                url: buildUploadUrl("products", "images", image.filename),
                 public_id: image.filename,
             };
         }

@@ -1,6 +1,7 @@
 const SubCategoryBanner = require("../model/SubCategoryBanner.js");
 const path = require("path");
 const fs = require("fs");
+const { buildUploadUrl } = require("../utils/uploadUrl");
 
 /* ================= SLUGIFY ================= */
 const slugify = (s = "") =>
@@ -11,8 +12,6 @@ const slugify = (s = "") =>
     .replace(/\s+/g, "-")
     .replace(/[^\w-]+/g, "")
     .replace(/--+/g, "-");
-
-const BASE_URL = process.env.BASE_URL || "http://localhost:8080";
 
 /* ================= GET ================= */
 exports.getSubCategoryBanner = async (req, res) => {
@@ -74,7 +73,7 @@ exports.createSubCategoryBanner = async (req, res) => {
       slugSub,
       description,
       bannerImage: {
-        url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+        url: buildUploadUrl("products", "images", file.filename),
         public_id: file.filename,
       },
     });
@@ -139,7 +138,7 @@ exports.updateSubCategoryBanner = async (req, res) => {
       }
 
       updatedImage = {
-        url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+        url: buildUploadUrl("products", "images", file.filename),
         public_id: file.filename,
       };
     }

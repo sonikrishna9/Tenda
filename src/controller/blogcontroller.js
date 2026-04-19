@@ -2,6 +2,7 @@ const Blog = require("../model/blogmodel");
 const slugify = require("../utils/slugify.js");
 const path = require("path");
 const fs = require("fs");
+const { buildUploadUrl } = require("../utils/uploadUrl");
 
 /* ================= CREATE BLOG ================= */
 exports.createBlog = async (req, res) => {
@@ -37,10 +38,8 @@ exports.createBlog = async (req, res) => {
             });
         }
 
-        const BASE_URL = process.env.BASE_URL || "http://localhost:8080";
-
         const featuredImage = {
-            url: `${BASE_URL}/uploads/products/feature-pictures/${featuredFile.filename}`,
+            url: buildUploadUrl("products", "feature-pictures", featuredFile.filename),
             public_id: featuredFile.filename,
         };
 
@@ -49,7 +48,7 @@ exports.createBlog = async (req, res) => {
 
         if (req.files?.images?.length) {
             gallery = req.files.images.map((file) => ({
-                url: `${BASE_URL}/uploads/products/images/${file.filename}`,
+                url: buildUploadUrl("products", "images", file.filename),
                 public_id: file.filename,
             }));
         }
@@ -173,10 +172,8 @@ exports.updateBlog = async (req, res) => {
                 if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
             }
 
-            const BASE_URL = process.env.BASE_URL || "http://localhost:8080";
-
             blog.featuredImage = {
-                url: `${BASE_URL}/uploads/products/feature-pictures/${file.filename}`,
+                url: buildUploadUrl("products", "feature-pictures", file.filename),
                 public_id: file.filename,
             };
         }

@@ -1,18 +1,10 @@
 const express = require("express");
 const router = express.Router();
 
-const {
-  getAllSEO,
-  getSEOBySlug,
-} = require("../controller/seo.controller.js");
+const { getAllSEO, getSEOBySlug } = require("../controller/seo.controller.js");
 
-
-
-// ➤ GET ALL
-router.get("/seo",getAllSEO);
-
-// ➤ GET BY SLUG
-router.get("/seo/:slug",getSEOBySlug);
-
+router.get("/seo", getAllSEO);
+router.get("/seo-entry", getSEOBySlug);
+router.get("/seo/:slug", getSEOBySlug);
 
 module.exports = router;
